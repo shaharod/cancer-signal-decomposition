@@ -1,0 +1,46 @@
+# --- Machine Learning Artifacts ---
+# Exclude all trained models and experiment results
+*.pt
+*.pth
+*.joblib
+*.json
+!best_meta.json  # Optional: Keep metadata if you want to track performance history
+
+# --- Data Files ---
+# Exclude raw gene matrices and clinical data
+/data
+
+# --- Python Environment & Build ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+pip-log.txt
+setup.cfg
+
+# --- macOS System Files ---
+# Specific to your development on a Mac
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V1
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# --- VS Code IDE ---
+# Your preferred editor
+.vscode/
+*.code-workspace
+.history/
+
+
+# old files
+/old\ files

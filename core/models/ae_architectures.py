@@ -1,0 +1,49 @@
+import torch
+import torch.nn as nn
+from typing import Tuple
+
+class Basic_AE(nn.Module):
+    def __init__(self, input_size: int, encoding_size: int):
+        super().__init__()
+        self.in_features = input_size # Added for the Trainer to identify input width
+        self.encoder = nn.Sequential(nn.Linear(input_size, encoding_size))
+        self.decoder = nn.Sequential(nn.Linear(encoding_size, input_size))
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        z = self.encoder(x)
+        return self.decoder(z), z
+    
+    def get_latents(self, x):
+        """Returns the central bottleneck representation."""
+        return self.encoder(x)
+
+
+class Layered_AE(nn.Module):
+    def __init__(self, input_size: int, encoding_size: int = 32, h1: int = 512, h2: int = 128):
+        super(Layered_AE, self).__init__()
+        self.in_features = input_size
+
+        self.encoder = nn.Sequential(
+            nn.Linear(input_size, h1),
+            nn.GELU(),
+            nn.Linear(h1, h2),
+            nn.GELU(),
+            nn.Linear(h2, encoding_size)
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(encoding_size, h2),
+            nn.GELU(),
+            nn.Linear(h2, h1),
+            nn.GELU(),
+            nn.Linear(h1, input_size)
+        )
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        z = self.encoder(x)
+        xhat = self.decoder(z)
+        return xhat, z
+
+    def get_latents(self, x):
+        """Returns the central bottleneck representation."""
+        return self.encoder(x)

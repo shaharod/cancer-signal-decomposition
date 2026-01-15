@@ -1,0 +1,131 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+import torch
+import joblib
+import os
+import json
+from sklearn.preprocessing import StandardScaler
+
+def fit_and_scale(train_df, test_df):
+    """Scaler fitted only on training genes."""
+    scaler = StandardScaler()
+    # Remove theta before scaling
+    train_genes = train_df.drop(columns=['theta_value'])
+    test_genes = test_df.drop(columns=['theta_value'])
+    
+    train_scaled = scaler.fit_transform(train_genes)
+    test_scaled = scaler.transform(test_genes)
+    
+    return (
+        torch.tensor(train_scaled, dtype=torch.float32),
+        torch.tensor(test_scaled, dtype=torch.float32),
+        scaler
+    )
+
+def inverse_scale(scaler, tensor):
+    """Converts a tensor back to original units."""
+    if scaler is None: return tensor
+    array = tensor.detach().cpu().numpy()
+    unscaled = scaler.inverse_transform(array)
+    return torch.tensor(unscaled, dtype=torch.float32)
+
+def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensures each patient is represented only once by randomly 
+    selecting one sample per patient ID (prefix before '_').
+    """
+    patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
+    return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
+
+def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
+    """
+    Loads data and aligns indices. 
+    If theta_path is None, it treats data as Healthy (Theta=0).
+    """
+    df_genes = pd.read_csv(gene_path, index_col=0).T
+    
+    # Remove technical duplicate patient samples
+    df_genes = clean_rows(df_genes)
+
+    if theta_path:
+        df_theta = pd.read_csv(theta_path, index_col=0)
+        # Align indices
+        common_idx = df_genes.index.intersection(df_theta.index)
+        df_genes = df_genes.loc[common_idx]
+        df_theta = df_theta.loc[common_idx]
+        # Combined DF with theta as last column
+        # df_genes['theta_value'] = df_theta.iloc[:, 0]
+        if mode == 'random':
+            print(">>> [EXPERIMENT] Overwriting real thetas with rnad values U(0,1)")
+            df_genes['theta_value'] = np.random.rand(len(df_genes))
+        elif mode == 'fixed':
+            print(">>> [EXPERIMENT] Overwriting real thetas with fixed 0.5 values U(0,1)")
+            df_genes['theta_value'] = 0.5 # Every sample is a "perfect mix"
+        else:
+            print("real thetas are used")
+            df_genes['theta_value'] = df_theta.iloc[:, 0] # True values
+
+    else:
+        # Healthy data: Add a column of zeros for theta
+        df_genes['theta_value'] = 0.0
+        
+    return df_genes
+
+def get_split_data(df, split_path, test_size=0.2, seed=42):
+    """
+    Reproducible split: loads from JSON or creates a new one.
+    """
+    if split_path and os.path.exists(split_path):
+        with open(split_path, "r") as f:
+            splits = json.load(f)
+
+        print(f"--> Loaded split from {split_path}")
+        return df.loc[splits["train_ids"]], df.loc[splits["test_ids"]]
+    
+    # New Split
+    train_ids, test_ids = train_test_split(
+        df.index.tolist(),
+        test_size=test_size,
+        random_state=seed,
+        shuffle=True
+    )
+    
+    # Save for future runs
+    if split_path:
+        os.makedirs(os.path.dirname(split_path), exist_ok=True)
+        with open(split_path, "w") as f:
+            json.dump({"train_ids": train_ids, "test_ids": test_ids}, f, indent=2)
+        print(f"--> Saved split to {split_path}")
+        
+    return df.loc[train_ids], df.loc[test_ids]
+
+
+def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=None, mode="true"):
+    """
+    Final Pipeline: Align -> Split -> Scale -> Tensor.
+    Returns: (train_tensor, test_tensor, scaler)
+    """
+
+    df_full = prepare_and_align_data(gene_path, theta_path, mode=mode)
+    train_df, test_df = get_split_data(df_full, split_path)
+    
+    if not use_scaling:
+        # We must use .values and specify dtype to create a valid PyTorch Tensor
+        train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        test_t = torch.tensor(test_df.values, dtype=torch.float32)
+        return train_t, test_t, None
+    
+    # Separate genes from theta
+    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
+    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    
+    # Scale only the genes
+    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
+    
+    # Combine back to [Genes | Theta]
+    train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
+    return train_tensor, test_tensor, scaler
+    
+    
