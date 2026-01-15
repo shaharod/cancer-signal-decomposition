@@ -1,5 +1,5 @@
 # 📋 Project Task List
-> Last Sync: 2026-01-16 00:53
+> Last Sync: 2026-01-16 01:17
 
 ### 🏷️ Keyword Legend
 Use these keywords in your code comments to categorize tasks:
@@ -14,15 +14,24 @@ Use these keywords in your code comments to categorize tasks:
 ---
 
 ## 🔍 Table of Contents
-* [📂 ./utils/analysis_utils.py](#-utilsanalysis_utilspy)
+* [📂 ./latent/latent_run.py](#-latentlatent_runpy)
+* [📂 ./latent/latent_utils.py](#-latentlatent_utilspy)
 
 <br>
 
 ---
 
-## 📂 ./utils/analysis_utils.py
+## 📂 ./latent/latent_run.py
 ### **🚨 Critical Fixes**
-  - [ ] Make sure it works, turned it to dict instead of list ([Line 33](./utils/analysis_utils.py#L33))
+  - [ ] i have no idea what is going on here, change or fix or whatever ([Line 6](./latent/latent_run.py#L6))
+<br>
+<br>
+
+---
+
+## 📂 ./latent/latent_utils.py
+### **🚨 Critical Fixes**
+  - [ ] i have no idea what is going on here, change or fix or whatever ([Line 15](./latent/latent_utils.py#L15))
 <br>
 <br>
 
