@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import config as cfg
-from utils import plots_utils as pu
+from utils import plots_utils_v1 as pu
 from utils import analysis_utils as au
 from utils.analysis_utils import TRAIN_LOSS_IDX, EVAL_LOSS_IDX, TEST_MSE_IDX
 
@@ -83,7 +83,12 @@ def get_model_reconstruction(arch_name, enc, tag, mixed_sample_np, h_base="pca")
             z_d = mix_model.disease.encoder(x)
             recon_d = mix_model.disease.ae.decoder(z_d)
             return recon_d.squeeze().numpy()
-             
+
+
+
+
+
+
 def main(mode_val):
     print(f"\n>>> PROCESSING PLOTS FOR: {mode_val.upper()}")
     phase = "disease"
@@ -99,6 +104,12 @@ def main(mode_val):
     # Load numerical results for bar charts
     data_s = {k: au.load_data_for_analysis(True, v, phase=phase) for k, v in labels.items()}
     data_u = {k: au.load_data_for_analysis(False, v, phase=phase) for k, v in labels.items()}
+
+    # 1. Plot the Bar Grid for this Base Category
+    pu.plot_bar_grid(data_s, data_u, cfg.ENCODING_SIZES, name, list(labels.keys()))
+    
+    # 2. Plot the Line Curves (One Figure per AE model vs PCA)
+    pu.plot_learning_curves(data_s, data_u, cfg.ENCODING_SIZES, name, list(labels.keys()))
 
     # --- Setup Plotting Path ---
     plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) #/ "synthtic_reconstruction"
@@ -140,19 +151,27 @@ def main(mode_val):
             data = data_s
         else:
             data = data_u
-        pu.compare_models_side_by_side(
-                losses_ae_basic=data["basic"][au.TRAIN_LOSS_IDX],     # Training curves
-                losses_ae_layered=data["layered"][au.TRAIN_LOSS_IDX], # Training curves
-                losses_pca=data["benchmark"][au.TRAIN_LOSS_IDX],      # Final MSE lines, FIXME: WAS EVAL_LOSS_IDX
-                encoding_sizes=cfg.ENCODING_SIZES,
-                save_path=f"dynamics_on_pca_base_test",
-                folder_path=plot_folder_str,
-                runtag=f"e{cfg.EPOCHS_NUM}",
-                ylim_top=100, 
-                zoom_x=100,
-                name1=f"D-Basic (H-PCA)",
-                name2=f"D-Layered (H-PCA)"
-            )
+        # pu.compare_models_side_by_side(
+        #         losses_ae_basic=data["basic"][au.TRAIN_LOSS_IDX],     # Training curves
+        #         losses_ae_layered=data["layered"][au.TRAIN_LOSS_IDX], # Training curves
+        #         losses_pca=data["benchmark"][au.TRAIN_LOSS_IDX],      # Final MSE lines, FIXME: WAS EVAL_LOSS_IDX
+        #         encoding_sizes=cfg.ENCODING_SIZES,
+        #         save_path=f"dynamics_on_pca_base_test",
+        #         folder_path=plot_folder_str,
+        #         runtag=f"e{cfg.EPOCHS_NUM}",
+        #         ylim_top=100, 
+        #         zoom_x=100,
+        #         name1=f"D-Basic (H-PCA)",
+        #         name2=f"D-Layered (H-PCA)"
+        #     )
+        pu.plot_training_convergence_subplots(
+            losses_ae_basic=data["basic"][au.TEST_MSE_IDX],     # Training curves
+            losses_ae_layered=data["layered"][au.TEST_MSE_IDX], # Training curves
+            losses_pca=data["benchmark"][au.TEST_MSE_IDX],      # Final MSE lines, FIXME: WAS EVAL_LOSS_IDX
+            encoding_sizes=cfg.ENCODING_SIZES,
+            save_path=f"dynamics_on_pca_base_test_try",
+            folder_path=plot_folder_str
+        )
     
 
     # 3. Multi-Model Reconstruction Scatter Comparison

@@ -1,400 +1,271 @@
 import matplotlib.pyplot as plt
+import utils.analysis_utils as au
+import config as cfg
 import numpy as np
 import os
-import math
+
+DATA_TYPE = 'Synthetic' if cfg.SYNTHETIC_DATA else 'True'
+ENC_SIZES = cfg.ENCODING_SIZES
 
 
-# --- CURVE PLOTS ---
-def compare_scaling_impact(losses_from_scaled_pipe, losses_from_unscaled_pipe, losses_pca_unscaled, 
-                           encoding_sizes, save_path, folder_path, runtag, ylim_top, 
-                           model_name="AE", zoom_x=50):
+def plot_test_mse_bars(data_s, data_u, fig_title, save_path):
     """
-    Compares the performance of a model trained on Scaled data vs Unscaled data.
-    Both are plotted in the ORIGINAL units (Unscaled MSE) to see if scaling helped.
+    Bar plots of Test MSE
     """
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
-    
-    # Left: Model trained on Scaled data, then projected back
-    # Right: Model trained on Unscaled data directly
-    axes = [ax1, ax2]
-    data_sources = [losses_from_scaled_pipe, losses_from_unscaled_pipe]
-    titles = [f"{model_name} (Trained on Scaled)", f"{model_name} (Trained on Raw)"]
+    num_rows = len(ENC_SIZES)
+    fig, axes = plt.subplots(num_rows, 2, figsize=(12, 4 * num_rows), squeeze=False)
+    fig.suptitle(fig_title, fontsize=16, fontweight='bold')
 
-    for ax, data_dict, title in zip(axes, data_sources, titles):
-        for i, enc in enumerate(encoding_sizes):
-            # Extract the 'unscaled' curve from the respective pipeline
-            curve = data_dict.get(enc, [])
-            pca_val = losses_pca_unscaled.get(enc, None)
+    col_titles = ["Pipeline: Trained on Scaled Data", "Pipeline: Trained on Raw Data"]
+    datasets = [data_s, data_u]
+
+    colors = ['#8dbade', '#558e3e', '#e1968b'] # Matching colors
+
+    for row_idx, enc in enumerate(ENC_SIZES):
+        for col_idx, data in enumerate(datasets):
+            ax = axes[row_idx, col_idx]
+            model_names = list(data.keys())
+
+            mse_vals = [data[m][au.TEST_MSE_IDX].get(enc, [0])[0] for m in model_names]
+
+            bars = ax.bar(model_names, mse_vals, color=colors[:len(model_names)], 
+                          edgecolor='black', alpha=0.9, width=0.6)
             
-            if curve:
-                epochs = np.arange(1, len(curve) + 1)
-                line, = ax.plot(epochs, curve, linewidth=1.8, label=f"Enc={enc}")
-                
-                if pca_val is not None:
-                    ax.hlines(pca_val, xmin=1, xmax=len(curve), linestyles="--", 
-                              linewidth=1.6, color=line.get_color(), alpha=0.7)
-
-        ax.set_title(title)
-        ax.set_xlabel("Epoch")
-        ax.grid(True, linestyle="--", alpha=0.5)
-        
-        # Focus on final convergence in original units
-        ax.set_ylim(0, ylim_top)
-        max_epochs = max([len(c) for c in data_dict.values()] or [1])
-        ax.set_xlim(max(1, max_epochs - zoom_x), max_epochs)
-
-    ax1.set_ylabel("MSE (Original Units)")
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, f"scaling_logic_comp_{runtag}.png"), bbox_inches="tight")
-    plt.close()
-
-
-def compare_models_side_by_side(losses_ae_basic, losses_ae_layered, losses_pca, encoding_sizes, 
-                                save_path, folder_path, runtag, ylim_top, zoom_x=50,
-                                name1="Basic AE", name2="Layered AE"):
-    """
-    Plots two AE architectures side-by-side.
-    - Each plot compares the AE curves to PCA baselines.
-    - Uses the zoomed styling (last N epochs) and grid style from your previous code.
-    """
-    if not encoding_sizes:
-        raise ValueError("encoding_sizes is empty.")
-
-    # Calculate global max epochs for x-axis scaling
-    max_epochs_global = 1
-    for d in [losses_ae_basic, losses_ae_layered]:
-        for enc in encoding_sizes:
-            curve = d.get(enc, [])
-            if curve:
-                max_epochs_global = max(max_epochs_global, len(curve))
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
-    axes = [ax1, ax2]
-    model_dicts = [losses_ae_basic, losses_ae_layered]
-    model_names = [name1, name2]
-
-    for ax, ae_dict, m_name in zip(axes, model_dicts, model_names):
-        for enc in encoding_sizes:
-            ae_curve = ae_dict.get(enc, [])
-            pca_val = losses_pca.get(enc, None)
-            
-            # 1. Plot AE Curve (Solid)
-            if ae_curve:
-                epochs = np.arange(1, len(ae_curve) + 1)
-                line, = ax.plot(epochs, ae_curve, linewidth=1.8, label=f"{m_name} (enc={enc})")
-                line_color = line.get_color() # Match PCA color to AE color
-
-                # 2. Plot PCA Line (Dashed)
-                if pca_val is not None:
-                    xmax = len(ae_curve)
-                    ax.hlines(pca_val, xmin=1, xmax=xmax, linestyles="--", 
-                              linewidth=1.6, color=line_color, label=f"PCA (enc={enc})")
-
-        # Styling from your preferred plot
-        ax.set_title(f"{m_name} Performance")
-        ax.set_xlabel("Epoch")
-        ax.grid(True, linestyle="--", alpha=0.5)
-        
-        # Zoom Logic
-        start_epoch = max(1, max_epochs_global - zoom_x + 1)
-        ax.set_xlim(start_epoch, max_epochs_global)
-        ax.set_ylim(bottom=0, top=ylim_top)
-
-    ax1.set_ylabel("MSE Loss")
-
-    # Legend Merging (from your old logic)
-    merged = {}
-    for ax in axes:
-        h, l = ax.get_legend_handles_labels()
-        for handle, label in zip(h, l):
-            merged[label] = handle
-
-    fig.legend(merged.values(), merged.keys(), loc="upper left", bbox_to_anchor=(1.0, 1.0))
-
-    plt.tight_layout(rect=[0, 0, 0.85, 1])
-    full_path = os.path.join(folder_path, f"{save_path}_{runtag}.png")
-    plt.savefig(full_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-
-
-def plot_grid_train_vs_eval_scaled_unscaled(train_s, eval_s, train_u, eval_u, encoding_sizes, epoch_jump, ylim_top, save_path, folder_path, model_name="AE"):
-    """Generates a grid of Train vs Eval curves for both Scaled and Unscaled data."""
-    n = len(encoding_sizes)
-    fig, axes = plt.subplots(n, 2, figsize=(12, 4 * n), squeeze=False)
-
-    for i, enc in enumerate(encoding_sizes):
-        for j, (tr, ev, title) in enumerate([(train_s, eval_s, "Scaled"), (train_u, eval_u, "Unscaled")]):
-            ax = axes[i, j]
-            t_curve = tr.get(enc, [])
-            e_curve = ev.get(enc, [])
-            
-            if t_curve:
-                ax.plot(np.arange(1, len(t_curve)+1), t_curve, label="Train")
-            if e_curve:
-                ax.plot(np.arange(epoch_jump, epoch_jump * len(e_curve) + 1, epoch_jump), e_curve, '--', label="Eval")
-            
-            ax.set_title(f"{model_name} (enc={enc}) | {title}")
-            ax.set_ylim(0, ylim_top)
-            ax.legend()
-
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, save_path))
-    plt.close()
-
-
-# -- LINE PLOT FOR MSE -- #
-def plot_test_mse_comparison_lines(
-    m1_s, m2_s, pca_s,  # Scaled results (dicts)
-    m1_u, m2_u, pca_u,  # Unscaled results (dicts)
-    encoding_sizes, title, save_path, folder_path,
-    labels=["Basic AE", "Layered AE", "PCA"]
-):
-    """
-    Plots Test MSE as a function of Encoding Size.
-    Left Plot: Scaled Pipeline | Right Plot: Raw Pipeline
-    """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=False)
-    
-    colors = ['#5DADE2', 'green', '#EC7063'] # Blue, Green, Red
-    markers = ['o', 's', '^'] # Circle, Square, Triangle
-    
-    pipelines = [
-        (ax1, [m1_s, m2_s, pca_s], "Pipeline: Trained on Scaled Data"),
-        (ax2, [m1_u, m2_u, pca_u], "Pipeline: Trained on Raw Data")
-    ]
-
-    for ax, model_dicts, col_title in pipelines:
-        for i, (m_dict, label) in enumerate(zip(model_dicts, labels)):
-            # Extract values for each encoding size (ensure they are floats)
-            y_values = []
-            for enc in encoding_sizes:
-                val = m_dict.get(enc, 0)
-                # Handle potential list/tensor wrap as seen in previous errors
-                y_values.append(float(np.array(val).flatten()[0]))
-            
-            # Plot the line
-            ax.plot(encoding_sizes, y_values, label=label, color=colors[i], 
-                    marker=markers[i], linewidth=2, markersize=8)
-
-            # --- Data Labels (Optional: shows exact MSE value next to points) ---
-            for x_val, y_val in zip(encoding_sizes, y_values):
-                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
-                            xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
-
-        # Formatting
-        ax.set_title(col_title, fontsize=14, pad=15)
-        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
-        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
-        ax.set_xticks(encoding_sizes)
-        ax.grid(True, linestyle='--', alpha=0.5)
-        ax.legend()
-
-        # Add headroom for labels
-        curr_ylim = ax.get_ylim()
-        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.2)
-
-    fig.suptitle(title, fontsize=18, y=1.05)
-    plt.tight_layout()
-    
-    output_path = os.path.join(folder_path, save_path)
-    plt.savefig(output_path, bbox_inches="tight", dpi=150)
-    print(f"Line comparison plot saved to: {output_path}")
-    plt.close()
-
-
-# --- BAR PLOTS ---
-def plot_model_comparison_bars(mse_ae, mse_pca, encoding_sizes, title, save_path, folder_path, labels=["AE", "PCA"]):
-    """Compare two models (or model vs PCA) side-by-side per encoding size."""
-    n = len(encoding_sizes)
-    ncols = min(3, n)
-    nrows = math.ceil(n / ncols)
-    fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows), squeeze=False)
-    axes = axes.flatten()
-
-    for i, enc in enumerate(encoding_sizes):
-
-        ax = axes[i]
-        vals = [mse_ae.get(enc, 0), mse_pca.get(enc, 0)]
-
-        x = np.arange(len(labels))
-        bars = ax.bar(x, vals, color=['skyblue', 'salmon'], edgecolor='black')
-        ax.set_xticks(x)
-        ax.set_xticklabels(labels)
-        ax.set_title(f"Enc Size: {enc}")
-        
-        for b in bars:
-            ax.text(b.get_x() + b.get_width()/2, b.get_height(), f'{b.get_height():.4g}', ha='center', va='bottom')
-
-    for j in range(i + 1, len(axes)): axes[j].axis('off')
-    fig.suptitle(title, fontsize=14)
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(os.path.join(folder_path, save_path))
-    plt.close()
-
-
-def plot_comprehensive_comparison_bars(
-    m1_s, m2_s, pca_s,  # Scaled Pipeline results (lists)
-    m1_u, m2_u, pca_u,  # Unscaled Pipeline results (lists)
-    encoding_sizes, title, save_path, folder_path, 
-    labels=["Basic AE", "Layered AE", "PCA"]
-):
-    """
-    Rows: Encoding Sizes
-    Cols: Scaled Pipeline vs Unscaled Pipeline (both in original units)
-    Bars: Shows the specific MSE value on top of each model bar.
-    """
-    n_enc = len(encoding_sizes)
-    # Increased width to 14 to make room for text labels
-    fig, axes = plt.subplots(n_enc, 2, figsize=(14, 4 * n_enc), squeeze=False)
-    
-    colors = ['#5DADE2', 'green', '#EC7063'] # Blue, green, Red
-    x = np.arange(len(labels))
-
-    for i, enc in enumerate(encoding_sizes):
-        # Column data mapping
-        col_data = [
-            (m1_s.get(enc, 0), m2_s.get(enc, 0), pca_s.get(enc, 0)), # Scaled side
-            (m1_u.get(enc, 0), m2_u.get(enc, 0), pca_u.get(enc, 0))  # Unscaled side
-        ]
-        col_titles = ["Pipeline: Trained on Scaled Data", "Pipeline: Trained on Raw Data"]
-
-        for j, (vals, col_title) in enumerate(zip(col_data, col_titles)):
-            ax = axes[i, j]
-            bars = ax.bar(x, vals, color=colors, edgecolor='black', alpha=0.8, width=0.6)
-            
-            ax.set_xticks(x)
-            ax.set_xticklabels(labels, fontweight='bold')
-            ax.set_title(f"Encoding {enc} | {col_title}", fontsize=13, pad=15)
+            ax.set_title(f"Encoding {enc} | {col_titles[col_idx]}", fontsize=12)
             ax.set_ylabel("MSE (Original Units)")
             ax.grid(axis='y', linestyle='--', alpha=0.3)
+            plt.setp(ax.get_xticklabels(), fontweight='bold', fontsize=9)
 
-            # --- VALUE LABELS LOGIC ---
             for b in bars:
                 height = b.get_height()
-                # Format to 4 significant figures. 
-                # Uses a slight offset (va='bottom') to sit just above the bar.
-                ax.text(
-                    b.get_x() + b.get_width()/2, 
-                    height,
-                    f'{height:.4g}', 
-                    ha='center', 
-                    va='bottom', 
-                    fontsize=11, 
-                    fontweight='bold',
-                    color='black'
-                )
+                ax.text(b.get_x() + b.get_width()/2, height + (max(mse_vals) * 0.01),
+                        f'{height:.4g}', ha='center', va='bottom', fontweight='bold', fontsize=10)
             
-            # Add some headroom on the Y-axis so labels don't get cut off
-            ax.set_ylim(0, max(vals) * 1.15)
+            ax.set_ylim(0, max(mse_vals) * 1.15)
 
-    fig.suptitle(title, fontsize=18, y=1.02)
-    plt.tight_layout()
-    
-    # Save with high DPI for crisp text
-    output_path = os.path.join(folder_path, save_path)
-    plt.savefig(output_path, bbox_inches="tight", dpi=150)
-    print(f"Comprehensive bar plot saved to: {output_path}")
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(save_path / f'{fig_title}.png')
     plt.close()
 
 
-def plot_bars(train_s, train_u, test_s, test_u, encoding_sizes, title, save_path, folder_path):
-    """Visualizes the 4-way comparison: Scaled/Unscaled x Train/Test."""
-    n = len(encoding_sizes)
-    fig, axes = plt.subplots(math.ceil(n/2), 2, figsize=(12, 5 * math.ceil(n/2)), squeeze=False)
-    axes = axes.flatten()
-    
-    labels = ["Tr Scaled", "Te Scaled", "Tr Raw", "Te Raw"]
-    for i, enc in enumerate(encoding_sizes):
-        ax = axes[i]
-        vals = [train_s.get(enc, 0), test_s.get(enc, 0), train_u.get(enc, 0), test_u.get(enc, 0)]
-        ax.bar(labels, vals, color=['blue', 'lightblue', 'green', 'lightgreen'])
-        ax.set_title(f"Encoding: {enc}")
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(folder_path, save_path))
-    plt.close()
-
-
-## scatter plot of recon for samples
-def plot_reconstruction_validation(pure_truth, mixed_input, reconstructed_disease, 
-                                   sample_idx, folder_path, runtag, 
-                                   arch_name="AE", enc=16):
+def plot_learning_curves(data_s, data_u, fig_title_prefix, save_path, zoom_params=None):
     """
-    Validation Scatter: Compares Model Reconstruction vs Ground Truth.
-    Dots = Genes.
+    Generates one figure per Model Type.
+    Rows: Encoding Sizes
+    Cols: Scaled vs Unscaled Data
     """
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
     
-    # helper for diagonal line
-    def add_identity(ax, a, b):
-        ma = max(a.max(), b.max())
-        ax.plot([0, ma], [0, ma], linewidth=1.5, c='red', linestyle='--', alpha=0.8, label="Identity")
+    # 1. Identify unique models (excluding PCA)
+    all_models = sorted(list(set(list(data_s.keys()) + list(data_u.keys()))))
+    models_to_plot = [m for m in all_models if 'pca' not in m.lower()]
 
-    # Plot 1: Input vs Truth (The Problem)
-    ax1.scatter(pure_truth, mixed_input, s=10, alpha=0.4, c='tab:gray', edgecolors='none')
-    add_identity(ax1, pure_truth, mixed_input)
-    ax1.set_title(f"Input (Mixed) vs. Ground Truth\nSample {sample_idx}", fontsize=13)
-    ax1.set_xlabel("Pure Disease Signal (Ground Truth)")
-    ax1.set_ylabel("Mixed Input Signal (Observed)")
-    ax1.grid(True, linestyle="--", alpha=0.3)
+    datasets = [("Scaled Data", data_s), ("Unscaled Data", data_u)]
 
-    # Plot 2: Reconstruction vs Truth (The Solution)
-    ax2.scatter(pure_truth, reconstructed_disease, s=10, alpha=0.4, c='tab:red', edgecolors='none')
-    add_identity(ax2, pure_truth, reconstructed_disease)
-    
-    # Calculate Correlation for the title
-    corr = np.corrcoef(pure_truth, reconstructed_disease)[0, 1]
-    ax2.set_title(f"Model Reconstruction vs. Ground Truth\nCorrelation: {corr:.4f}", fontsize=13)
-    ax2.set_xlabel("Pure Disease Signal (Ground Truth)")
-    ax2.set_ylabel("Extracted Disease Signal (Model Output)")
-    ax2.grid(True, linestyle="--", alpha=0.3)
-
-    plt.suptitle(f"Reconstruction Accuracy: {arch_name} (Enc={enc})", fontsize=16, y=1.02)
-    plt.tight_layout()
-    
-    # Save logic matching your existing style
-    save_name = f"reconstruction_val_{arch_name}_enc{enc}_sample{sample_idx}_{runtag}.png"
-    full_path = os.path.join(folder_path, save_name)
-    plt.savefig(full_path, dpi=150, bbox_inches="tight")
-    print(f"Validation scatter saved to: {full_path}")
-    plt.close(fig)
-
-
-def plot_multi_model_reconstruction(pure_truth, mixed_input, recon_dict, 
-                                     sample_idx, folder_path, runtag, enc=16):
-    """
-    Creates a grid comparing different architectures' ability to reconstruct 
-    the same sample.
-    recon_dict: {'PCA': data, 'Basic AE': data, 'Layered AE': data}
-    """
-    n_models = len(recon_dict)
-    fig, axes = plt.subplots(1, n_models + 1, figsize=(4 * (n_models + 1), 5), sharey=True)
-    
-    # helper for diagonal line
-    def add_identity(ax, a, b):
-        ma = max(a.max(), b.max())
-        ax.plot([0, ma], [0, ma], linewidth=1.5, c='red', linestyle='--', alpha=0.8)
-
-    # 1. The Input (Reference)
-    axes[0].scatter(pure_truth, mixed_input, s=8, alpha=0.3, c='tab:gray')
-    add_identity(axes[0], pure_truth, mixed_input)
-    axes[0].set_title(f"Mixed Input\n(Sample {sample_idx})", fontsize=12)
-    axes[0].set_ylabel("Observed / Extracted Value")
-
-    # 2. The Model Reconstructions
-    for i, (name, recon_val) in enumerate(recon_dict.items()):
-        ax = axes[i+1]
-        ax.scatter(pure_truth, recon_val, s=8, alpha=0.4, c='tab:blue' if 'AE' in name else 'tab:green')
-        add_identity(ax, pure_truth, recon_val)
+    for model_name in models_to_plot:
         
-        corr = np.corrcoef(pure_truth, recon_val)[0, 1]
-        ax.set_title(f"{name}\nCorr: {corr:.4f}", fontsize=12)
-        ax.set_xlabel("Ground Truth")
+        num_rows = len(ENC_SIZES)
+        # Increased height slightly to accommodate headers
+        fig, axes = plt.subplots(num_rows, 2, figsize=(13, 4.5 * num_rows), squeeze=False)
+        title = ' '.join(fig_title_prefix.split('_'))
+        fig.suptitle(f"{title}: {model_name}", fontsize=18, fontweight='bold', y=0.96)
 
+        for row_idx, enc in enumerate(ENC_SIZES):
+            for col_idx, (col_name, data) in enumerate(datasets):
+                ax = axes[row_idx, col_idx]
+
+                # --- Titles & Headers ---
+                # 1. Standard Subplot Title (Encoding Size)
+                ax.set_title(f"Encoding Size: {enc}", fontsize=11, fontweight='bold')
+
+                # 2. Column Header: Manually placed significantly HIGHER (Only on top row)
+                if row_idx == 0:
+                    ax.text(0.5, 1.12, col_name, 
+                            transform=ax.transAxes, 
+                            ha='center', va='bottom', 
+                            fontsize=14, fontweight='bold') 
+
+                # --- Data Extraction ---
+                if model_name not in data:
+                    ax.text(0.5, 0.5, "Model not in dataset", ha='center', transform=ax.transAxes)
+                    continue
+
+                model_tuple = data[model_name]
+                train_h = model_tuple[au.TRAIN_LOSS_IDX].get(enc, [])
+                eval_h  = model_tuple[au.EVAL_LOSS_IDX].get(enc, [])
+
+                # --- Plotting ---
+                if len(train_h) > 0:
+                    epochs = np.arange(1, len(train_h) + 1)
+                    # Train: Blue Line
+                    ax.plot(epochs, train_h, label="Train", color='tab:blue', linewidth=1.5)
+
+                    if len(eval_h) > 0:
+                        step = len(train_h) // len(eval_h)
+                        e_epochs = np.arange(step, len(train_h) + 1, step)
+                        # Eval: Orange Dashed Line with Markers
+                        ax.plot(e_epochs, eval_h, label="Eval", color='tab:orange', 
+                                linestyle='--', marker='.', markersize=6, alpha=0.8)
+
+                # --- Zoom & formatting ---
+                if zoom_params:
+                    if 'last_n_epochs' in zoom_params and len(train_h) > 0:
+                        max_e = len(train_h)
+                        ax.set_xlim(max(1, max_e - zoom_params['last_n_epochs']), max_e)
+                    
+                    if 'ylim_top' in zoom_params and zoom_params['ylim_top'] is not None:
+                        ax.set_ylim(0, zoom_params['ylim_top'])
+
+                ax.set_ylabel("Loss (MSE)")
+                ax.set_xlabel("Epochs")
+                ax.grid(True, linestyle='--', alpha=0.3)
+                ax.legend(fontsize='small', loc='upper right')
+
+        # Adjusted rect to leave more room at the top for the manual headers
+        plt.tight_layout(rect=[0, 0.03, 1, 0.96]) 
+        
+        file_name = f"{fig_title_prefix}_{model_name}.png"
+        plt.savefig(save_path / file_name)
+        plt.close()
+        print(f"Saved plot: {file_name}")
+
+
+
+
+def plot_reconstruction_scatter(original, reconstructed, title, save_path, log_scale=False):
+    """Plot 4: Individual Gene Reconstruction with Pearson Correlation."""
+    plt.figure(figsize=(8, 8))
+    x, y = np.array(original).flatten(), np.array(reconstructed).flatten()
+    
+    # Calculate Correlation Coefficient
+    corr = np.corrcoef(x, y)[0, 1]
+    
+    plt.scatter(x, y, alpha=0.4, s=10, color='#3498db', edgecolors='none', label='Genes')
+    
+    # Identity Line
+    ma = max(x.max(), y.max())
+    plt.plot([0, ma], [0, ma], color='red', linestyle='--', linewidth=1.5, label='Identity (y=x)')
+
+    plt.title(f"{title}\nPearson Correlation: {corr:.4f}", fontsize=14, fontweight='bold')
+    plt.xlabel("Ground Truth Expression", fontweight='bold')
+    plt.ylabel("Model Reconstruction", fontweight='bold')
+    
+    if log_scale:
+        plt.xscale('log'); plt.yscale('log')
+
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.legend()
     plt.tight_layout()
-    save_path = os.path.join(folder_path, f"multi_model_recon_sample{sample_idx}_{runtag}.png")
-    plt.savefig(save_path, dpi=150, bbox_inches="tight")
-    print(f"Multi-model scatter saved to: {save_path}")
+    plt.savefig(save_path) # Analyzer provides the full filename here
     plt.close()
+
+
+
+def plot_mse_vs_encoding(data_s, data_u, fig_title, save_path):
+    """
+    Test MSE loss change over encding sizes
+    """
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=False)
+    fig.suptitle(fig_title, fontsize=16, fontweight='bold')
+    col_titles = ["Pipeline: Scaled Data", "Pipeline: Raw Data"]
+    datasets = [data_s, data_u]
+    markers = ['o', 's', 'D', '^', 'v']
+
+    for col_idx, data in enumerate(datasets):
+        ax = axes[col_idx]
+        for m_idx, (model_name, model_tuple) in enumerate(data.items()):
+            mse_dict = model_tuple[2]
+            y_vals = [float(np.array(mse_dict.get(enc, 0)).flatten()[0]) for enc in ENC_SIZES]
+            ax.plot(ENC_SIZES, y_vals, marker=markers[m_idx % len(markers)], label=model_name, linewidth=2)
+            
+            # Annotate exact values
+            for x_val, y_val in zip(ENC_SIZES, y_vals):
+                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
+                            xytext=(0,10), ha='center', fontsize=8, fontweight='bold')
+
+        ax.set_title(col_titles[col_idx]); ax.set_xticks(ENC_SIZES)
+        ax.set_ylabel("Final Test MSE"); ax.grid(True, alpha=0.4)
+        ax.set_xlabel("Encoding Size"); ax.grid(True, alpha=0.4)
+        ax.legend()
+        ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] * 1.2) # Headroom
+
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    plt.savefig(save_path / f'{fig_title}.png')
+    plt.close()
+
+
+def plot_training_vs_pca(data_s, data_u, fig_title_prefix, save_path):
+    """
+    Plots Training Loss vs PCA Baseline.
+    One figure per Model Type.
+    Rows: Encoding Sizes
+    Cols: Scaled vs Unscaled Data
+    """
+    
+    # 1. Separate PCA models from AE models
+    all_keys = sorted(list(set(list(data_s.keys()) + list(data_u.keys()))))
+    pca_keys = [k for k in all_keys if 'pca' in k.lower()]
+    ae_models = [k for k in all_keys if 'pca' not in k.lower()]
+
+    datasets = [("Scaled Data", data_s), ("Unscaled Data", data_u)]
+
+    for model_name in ae_models:
+        
+        num_rows = len(ENC_SIZES)
+        fig, axes = plt.subplots(num_rows, 2, figsize=(12, 3.5 * num_rows), squeeze=False)
+        fig.suptitle(f"{fig_title_prefix}: {model_name} vs PCA", fontsize=18, fontweight='bold', y=0.98)
+
+        for row_idx, enc in enumerate(ENC_SIZES):
+            for col_idx, (col_name, data) in enumerate(datasets):
+                ax = axes[row_idx, col_idx]
+
+                # --- Headers & Titles ---
+                ax.set_title(f"Encoding: {enc}", fontsize=11, fontweight='bold')
+                
+                if row_idx == 0:
+                    ax.text(0.5, 1.08, col_name, 
+                            transform=ax.transAxes, 
+                            ha='center', va='bottom', 
+                            fontsize=14, fontweight='bold') 
+
+                # --- Get PCA Baseline for this specific data/encoding ---
+                pca_val = None
+                # Find the corresponding PCA model in this dataset
+                current_pca_key = next((k for k in data.keys() if 'pca' in k.lower()), None)
+                
+                if current_pca_key:
+                    # Usually PCA is constant, so we take the first value or min value of its "history"
+                    pca_hist = data[current_pca_key][au.TRAIN_LOSS_IDX].get(enc, [])
+                    if pca_hist:
+                        pca_val = pca_hist[-1] # Taking the final converged value
+
+                # --- Get AE Model Data ---
+                if model_name in data:
+                    train_h = data[model_name][au.TRAIN_LOSS_IDX].get(enc, [])
+                    
+                    if len(train_h) > 0:
+                        epochs = np.arange(1, len(train_h) + 1)
+                        # Main Model Line
+                        ax.plot(epochs, train_h, label=f"{model_name} (Train)", 
+                                color='tab:blue', linewidth=2)
+                        
+                        # PCA Baseline Line
+                        if pca_val is not None:
+                            ax.axhline(y=pca_val, color='tab:green', linestyle='--', 
+                                       linewidth=2, label=f"PCA Baseline ({pca_val:.2f})")
+
+                # --- Formatting ---
+                ax.set_ylabel("Training Loss (MSE)")
+                ax.set_xlabel("Epochs")
+                ax.grid(True, linestyle=':', alpha=0.6)
+                ax.legend(fontsize='small', loc='upper right')
+
+        # Tight layout logic matches your preference
+        plt.tight_layout(rect=[0, 0.03, 1, 0.93])
+        
+        file_name = f"{fig_title_prefix}_{model_name}_vs_PCA.png"
+        plt.savefig(save_path / file_name)
+        plt.close()
+        print(f"Saved plot: {file_name}")

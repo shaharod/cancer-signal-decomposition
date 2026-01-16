@@ -1,6 +1,6 @@
 import os
 import config as cfg
-from utils import plots_utils as pu
+from utils import plots_utils_v1 as pu
 from utils import analysis_utils as au
 # from utils.analysis_utils import au.TRAIN_LOSS_IDX, EVAL_LOSS_IDX, TEST_MSE_IDX
 
