@@ -1,6 +1,14 @@
 from pathlib import Path
 import os
 
+# TODO: Add missing logic:
+# - try to add logs in training, like keeping track of how long it took, what were the values that were used, etc.
+# - decide on path for that
+
+# FIXME: theta issue
+# - i remember three thetas checks, i see two: 0.5 and uniform/ true if its in real experiments
+# also, why is theta 0.5 being tested in real experiments and not only in synthetic data
+
 
 # ---- Project Root ----
 PROJECT_ROOT = Path(__file__).resolve().parent
