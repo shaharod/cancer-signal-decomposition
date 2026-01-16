@@ -10,7 +10,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 # ---- Global Decisions ----
 RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = False
-SYNTHETIC_DATA = False
+SYNTHETIC_DATA = True
 DEVICE = 'mps' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
 
@@ -29,13 +29,12 @@ else:
 
 SIG_PATH = DATA_SUB / "SIGpassClinicalQC_H3K4me3.csv"
 
-
 # ---- Hyperparameters ----
-EPOCHS_NUM     = 100
+EPOCHS_NUM     = 300
 BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
-ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [16]
+ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
 
 
 # Layered AE architecture settings
@@ -75,12 +74,11 @@ def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODEL
 
         if FIXED_THETA_EXP:
             root = DISEASE_OUT_DIR / 'disease_mix_fixed_0.5'
-            
         elif RANDOM_THETA_EXP:
             root = DISEASE_OUT_DIR / 'disease_mix_random_theta'
-        
         else:
-            root = DISEASE_OUT_DIR / 'disease_mix_uniform_theta'
+            theta_type = 'uniform' if SYNTHETIC_DATA else 'true'
+            root = DISEASE_OUT_DIR / f'disease_mix_{theta_type}_theta'
     else:
         root = HEALTHY_OUT_DIR
     
@@ -94,7 +92,7 @@ def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODEL
         path = root / scale_tag / model_type / f"enc_{enc}"
 
     os.makedirs(path, exist_ok=True)
-    return path     
+    return path
 
 
 def get_split_path(phase, scale_tag):

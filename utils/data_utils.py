@@ -6,6 +6,7 @@ import joblib
 import os
 import json
 from sklearn.preprocessing import StandardScaler
+import config as cfg
 
 def fit_and_scale(train_df, test_df):
     """Scaler fitted only on training genes."""
@@ -109,7 +110,8 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
 
     df_full = prepare_and_align_data(gene_path, theta_path, mode=mode)
     train_df, test_df = get_split_data(df_full, split_path)
-    
+    # update_sample_metadata(cfg.LOG_PATH, gene_path, train_df, test_df, mode)
+
     if not use_scaling:
         # We must use .values and specify dtype to create a valid PyTorch Tensor
         train_t = torch.tensor(train_df.values, dtype=torch.float32)
@@ -128,4 +130,33 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
     
-    
+# def update_sample_metadata(log_path, gene_path, train_df, test_df, mode):
+    """
+    Saves counts into a single JSON file.
+    Key: Filename + Mode
+    """
+    # Get just the filename (e.g., 'BRCA_data' from 'path/to/BRCA_data.csv')
+    dataset_name = os.path.splitext(os.path.basename(gene_path))[0]
+    entry_key = f"{dataset_name}_{mode}"
+
+    stats = {}
+    if os.path.exists(log_path):
+        with open(log_path, "r") as f:
+            stats = json.load(f)
+
+    # Calculate Healthy vs Disease based on theta_value
+    # (Assuming 0 is healthy, >0 is disease)
+    total_df = pd.concat([train_df, test_df])
+    healthy_count = int((total_df['theta_value'] == 0).sum())
+    disease_count = int((total_df['theta_value'] > 0).sum())
+
+    stats[entry_key] = {
+        "Train": len(train_df),
+        "Test": len(test_df),
+        "Healthy": healthy_count,
+        "Disease": disease_count,
+        "Total": len(total_df)
+    }
+
+    with open(log_path, "w") as f:
+        json.dump(stats, f, indent=4)

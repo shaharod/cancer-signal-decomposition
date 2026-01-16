@@ -144,7 +144,64 @@ def plot_grid_train_vs_eval_scaled_unscaled(train_s, eval_s, train_u, eval_u, en
     plt.close()
 
 
+# -- LINE PLOT FOR MSE -- #
+def plot_test_mse_comparison_lines(
+    m1_s, m2_s, pca_s,  # Scaled results (dicts)
+    m1_u, m2_u, pca_u,  # Unscaled results (dicts)
+    encoding_sizes, title, save_path, folder_path,
+    labels=["Basic AE", "Layered AE", "PCA"]
+):
+    """
+    Plots Test MSE as a function of Encoding Size.
+    Left Plot: Scaled Pipeline | Right Plot: Raw Pipeline
+    """
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=False)
+    
+    colors = ['#5DADE2', 'green', '#EC7063'] # Blue, Green, Red
+    markers = ['o', 's', '^'] # Circle, Square, Triangle
+    
+    pipelines = [
+        (ax1, [m1_s, m2_s, pca_s], "Pipeline: Trained on Scaled Data"),
+        (ax2, [m1_u, m2_u, pca_u], "Pipeline: Trained on Raw Data")
+    ]
 
+    for ax, model_dicts, col_title in pipelines:
+        for i, (m_dict, label) in enumerate(zip(model_dicts, labels)):
+            # Extract values for each encoding size (ensure they are floats)
+            y_values = []
+            for enc in encoding_sizes:
+                val = m_dict.get(enc, 0)
+                # Handle potential list/tensor wrap as seen in previous errors
+                y_values.append(float(np.array(val).flatten()[0]))
+            
+            # Plot the line
+            ax.plot(encoding_sizes, y_values, label=label, color=colors[i], 
+                    marker=markers[i], linewidth=2, markersize=8)
+
+            # --- Data Labels (Optional: shows exact MSE value next to points) ---
+            for x_val, y_val in zip(encoding_sizes, y_values):
+                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
+                            xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
+
+        # Formatting
+        ax.set_title(col_title, fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(encoding_sizes)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend()
+
+        # Add headroom for labels
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.2)
+
+    fig.suptitle(title, fontsize=18, y=1.05)
+    plt.tight_layout()
+    
+    output_path = os.path.join(folder_path, save_path)
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    print(f"Line comparison plot saved to: {output_path}")
+    plt.close()
 
 
 # --- BAR PLOTS ---

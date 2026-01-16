@@ -105,12 +105,11 @@ if __name__ == "__main__":
         if mode == "true":
             cfg.RANDOM_THETA_EXP = False
             cfg.FIXED_THETA_EXP = False
-        # elif mode == "random":
-        #     cfg.RANDOM_THETA_EXP = True
-        #     cfg.FIXED_THETA_EXP = False
+        elif mode == "random":
+            cfg.RANDOM_THETA_EXP = True
+            cfg.FIXED_THETA_EXP = False
         elif mode == "fixed":
             cfg.RANDOM_THETA_EXP = False
             cfg.FIXED_THETA_EXP = True
             
         run_cross_architecture_tournament(mode)
-        

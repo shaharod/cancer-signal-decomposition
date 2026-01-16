@@ -23,7 +23,7 @@ def load_reconstruction_data(mode_val):
         return None, None
         
     df_mixed = pd.read_csv(mix_file, index_col=0).T
-    df_pure  = pd.read_csv('pure_disease_truth.csv', index_col=0).T
+    df_pure  = pd.read_csv(truth_file, index_col=0).T
     return df_mixed, df_pure
 
 
@@ -101,7 +101,7 @@ def main(mode_val):
     data_u = {k: au.load_data_for_analysis(False, v, phase=phase) for k, v in labels.items()}
 
     # --- Setup Plotting Path ---
-    plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / "synthtic_reconstruction"
+    plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) #/ "synthtic_reconstruction"
     plot_root.mkdir(parents=True, exist_ok=True)
     plot_folder_str = str(plot_root) + os.sep
 
@@ -119,6 +119,41 @@ def main(mode_val):
         folder_path=plot_folder_str,
         labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
     )
+
+    pu.plot_test_mse_comparison_lines(
+            m1_s=data_s["basic"][au.TEST_MSE_IDX],
+            m2_s=data_s["layered"][au.TEST_MSE_IDX],
+            pca_s=data_s["benchmark"][TEST_MSE_IDX],
+            m1_u=data_u["basic"][au.TEST_MSE_IDX],
+            m2_u=data_u["layered"][au.TEST_MSE_IDX],
+            pca_u=data_u["benchmark"][TEST_MSE_IDX],
+            encoding_sizes=cfg.ENCODING_SIZES,
+            title=f"Disease Tournament: AE Basic vs AE Layered vs PCA (Healthy Base = PCA)",
+            save_path="pca_base_tournament_lines.png",
+            folder_path=plot_folder_str
+            # folder_path=plot_folder_str,
+            # labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
+        )
+
+    for tag in ["scaled", "unscaled"]:
+        if tag == "scaled":
+            data = data_s
+        else:
+            data = data_u
+        pu.compare_models_side_by_side(
+                losses_ae_basic=data["basic"][au.TRAIN_LOSS_IDX],     # Training curves
+                losses_ae_layered=data["layered"][au.TRAIN_LOSS_IDX], # Training curves
+                losses_pca=data["benchmark"][au.TRAIN_LOSS_IDX],      # Final MSE lines, FIXME: WAS EVAL_LOSS_IDX
+                encoding_sizes=cfg.ENCODING_SIZES,
+                save_path=f"dynamics_on_pca_base_test",
+                folder_path=plot_folder_str,
+                runtag=f"e{cfg.EPOCHS_NUM}",
+                ylim_top=100, 
+                zoom_x=100,
+                name1=f"D-Basic (H-PCA)",
+                name2=f"D-Layered (H-PCA)"
+            )
+    
 
     # 3. Multi-Model Reconstruction Scatter Comparison
     df_mixed, df_pure = load_reconstruction_data(mode_val)
@@ -151,7 +186,6 @@ def main(mode_val):
 
 if __name__ == "__main__":
     # Ensure SYNTHETIC_DATA is True in config
-    cfg.SYNTHETIC_DATA = True 
     
     for mode in ["true", "fixed"]:
         # Update Global Configs dynamically

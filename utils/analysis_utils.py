@@ -28,7 +28,7 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy") -> tuple[dict
 
                 # same for both, pca is calculated once
                 eval_loss[enc] = [v_mse]
-                test_mse[enc] = v_mse
+                test_mse[enc] = [v_mse]
                 
             continue
             
@@ -40,7 +40,8 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy") -> tuple[dict
             eval_loss[enc] = history.get("val", [])
         
         if meta:
-            test_mse[enc] = meta.get('best_val', 0)
+            val = meta.get('best_val', None)
+            test_mse[enc] = [val]
             # test_mse.append(meta.get("best_val", 0))
         else:
             # fallback - take last value from validation losses
