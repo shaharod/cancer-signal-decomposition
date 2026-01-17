@@ -272,91 +272,15 @@ def plot_training_vs_pca(data_s, data_u, fig_title_prefix, save_path):
                     #### Sarina Plots Fixing Logic - Try ####
 
 ## Sarina plot addition ##
-
-# -- CURVE PLOTS -- #
-def plot_train_eval_curves(data_s, data_u, save_name, folder_path, 
-                                 include_pca=False, zoom_params=None):
-    """
-    Plots Train vs Eval for all models.
-    zoom_params: dict with {'last_n_epochs': int, 'ylim_top': float} or None
-    """
-    color_map = {
-        'basic': '#1f77b4',    # Blue
-        'layered': '#2ca02c',  # Green
-        'pca': '#EC7063',
-        'default': '#7f7f7f'   # Gray fallback
+style_map = {
+        'basic': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
+        'Basic-AE': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
+        'layered': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
+        'Layered-AE': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
+        'pca-based': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'},
+        'PCA': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'}
     }
-    # Get encoding sizes from the first available model
-    first_model = next(iter(data_s.values()))
-    encoding_sizes = list(first_model[0].keys())
-    n_enc = len(encoding_sizes)
-    
-    # Identify AE models vs PCA baseline
-    pca_keys = ['pca-based', 'PCA', 'pca']
-    models_to_plot = [m for m in data_s.keys() if m not in pca_keys]
-    
-    for model_key in models_to_plot:
-        fig, axes = plt.subplots(n_enc, 2, figsize=(14, 4 * n_enc), squeeze=False)
-        title_suffix = " (Zoomed)" if zoom_params else ""
-        fig.suptitle(f"Training History: {model_key}{title_suffix}", fontsize=16, y=1.02)
-
-        for i, enc in enumerate(encoding_sizes):
-            for j, (data_dict, title) in enumerate([(data_s, "Scaled"), (data_u, "Unscaled")]):
-                ax = axes[i, j]
-                
-                # Unpack Model Data
-                train_curve = data_dict[model_key][0].get(enc, [])
-                eval_curve = data_dict[model_key][1].get(enc, [])
-                
-                if not train_curve: continue
-                
-                # Setup X-axis
-                epochs = np.arange(1, len(train_curve) + 1)
-                
-                # Plotting AE
-                current_color = color_map.get(model_key, color_map['default'])                  
-                ax.plot(epochs, train_curve, label=f"Train", color=current_color, linestyle='-', lw=1.5)
-                ax.plot(epochs, eval_curve, label=f"Eval", color=current_color, linestyle='--', lw=1.2)
-
-                # Optional PCA Lines
-                if include_pca:
-                    # Find which PCA key exists in this dataset
-                    current_pca_key = next((k for k in pca_keys if k in data_dict), None)
-                    if current_pca_key:
-                        p_train = data_dict[current_pca_key][0].get(enc, [None])[0]
-                        p_eval = data_dict[current_pca_key][1].get(enc, [None])[0]
-                        pca_color = color_map['pca']
-                        if p_train is not None:
-                            ax.axhline(y=p_train, color=pca_color, linestyle='-', alpha=0.6, label="PCA Train")
-                        if p_eval is not None:
-                            ax.axhline(y=p_eval, color=pca_color, linestyle='--', alpha=0.6, label="PCA Eval")
-
-                # Zoom Logic (Only if zoom_params is not None)
-                if zoom_params:
-                    last_n = zoom_params.get('last_n_epochs', 0)
-                    y_max = zoom_params.get('ylim_top')
-                    
-                    if last_n > 0:
-                        start_x = max(0, len(train_curve) - last_n)
-                        ax.set_xlim(start_x, len(train_curve))
-                    
-                    if y_max is not None:
-                        ax.set_ylim(0, y_max)
-
-                # Formatting
-                ax.set_title(f"{title} | Enc: {enc}")
-                ax.set_ylabel("MSE")
-                ax.grid(True, which='both', linestyle=':', alpha=0.5)
-                ax.legend(loc='upper right', fontsize='x-small')
-
-        plt.tight_layout()
-        
-        # Save file
-        os.makedirs(folder_path, exist_ok=True)
-        filename = f"{save_name}_{model_key}.png"
-        plt.savefig(os.path.join(folder_path, filename), bbox_inches='tight', dpi=150)
-        plt.close()
-
+# -- CURVE PLOTS -- #
 def compare_models_side_by_side_grid(losses_ae_basic_s, losses_ae_layered_s, losses_pca_s, 
                                      losses_ae_basic_u, losses_ae_layered_u, losses_pca_u,
                                      encoding_sizes, 
@@ -366,7 +290,6 @@ def compare_models_side_by_side_grid(losses_ae_basic_s, losses_ae_layered_s, los
     Plots a 2x2 grid: comparing loss curves for basic and layered compared to the pca
     Rows: Scaled Data, Unscaled Data
     Cols: Basic AE vs PCA, Layered AE vs PCA
-    Each plot holds all enc size curves
     """
     if not encoding_sizes:
         raise ValueError("encoding_sizes is empty.")
@@ -449,6 +372,101 @@ def compare_models_side_by_side_grid(losses_ae_basic_s, losses_ae_layered_s, los
     plt.savefig(full_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
+
+def plot_train_eval_curves(data_s, data_u, save_name, folder_path, 
+                                 include_pca=False, zoom_params=None):
+    """
+    Plots Train vs Eval for all models.
+    zoom_params: dict with {'last_n_epochs': int, 'ylim_top': float} or None
+    """
+    # color_map = {
+    #     'basic': '#1f77b4',    # Blue
+    #     'layered': '#2ca02c',  # Green
+    #     'pca': '#EC7063',
+    #     'default': '#7f7f7f'   # Gray fallback
+    # }
+    # Get encoding sizes from the first available model
+    first_model = next(iter(data_s.values()))
+    encoding_sizes = list(first_model[0].keys())
+    n_enc = len(encoding_sizes)
+    
+    # Identify AE models vs PCA baseline
+    pca_keys = ['pca-based', 'PCA', 'pca']
+    models_to_plot = [m for m in data_s.keys() if m not in pca_keys]
+    
+    for model_key in models_to_plot:
+        fig, axes = plt.subplots(n_enc, 2, figsize=(14, 4 * n_enc), squeeze=False)
+        title_suffix = " (Zoomed)" if zoom_params else ""
+        fig.suptitle(f"Training History: {model_key}{title_suffix}", fontsize=16, y=1.02)
+
+        for i, enc in enumerate(encoding_sizes):
+            for j, (data_dict, title) in enumerate([(data_s, "Scaled"), (data_u, "Unscaled")]):
+                ax = axes[i, j]
+                
+                # Unpack Model Data
+                train_curve = data_dict[model_key][0].get(enc, [])
+                eval_curve = data_dict[model_key][1].get(enc, [])
+                
+                if not train_curve: continue
+                
+                # Setup X-axis
+                epochs = np.arange(1, len(train_curve) + 1)
+                
+                # Plotting AE
+                style = style_map.get(model_key, {'color': 'gray', 'marker': 'x', 'label': model_key})
+
+                # current_model = style_map.get(model_key, color_map['default'])                
+                ax.plot(epochs, train_curve, label=f"Train", color=style['color'], linestyle='-', lw=1.5)
+                if len(eval_curve) > 0:
+                    # Calculate how often we validated (e.g., 300 / 60 = 5)
+                    epoch_jump = len(train_curve) // len(eval_curve)
+                    
+                    # Create an x-axis that jumps by that amount: [5, 10, 15... 300]
+                    eval_epochs = np.arange(epoch_jump, len(train_curve) + 1, epoch_jump)
+                    
+                    # Ensure they match exactly in case of rounding
+                    eval_epochs = eval_epochs[:len(eval_curve)] 
+                    
+                    ax.plot(eval_epochs, eval_curve, label="Eval", color=style['color'], linestyle='--', lw=1.2)
+                # Optional PCA Lines
+                if include_pca:
+                    # Find which PCA key exists in this dataset
+                    current_pca_key = next((k for k in pca_keys if k in data_dict), None)
+                    if current_pca_key:
+                        p_train = data_dict[current_pca_key][0].get(enc, [None])[0]
+                        p_eval = data_dict[current_pca_key][1].get(enc, [None])[0]
+                        pca_style = style_map.get('PCA',{'color': 'gray', 'marker': 'x', 'label': model_key})
+                        if p_train is not None:
+                            ax.axhline(y=p_train, color=pca_style['color'], linestyle='-', alpha=0.6, label="PCA Train")
+                        if p_eval is not None:
+                            ax.axhline(y=p_eval, color=pca_style['color'], linestyle='--', alpha=0.6, label="PCA Eval")
+
+                # Zoom Logic (Only if zoom_params is not None)
+                if zoom_params:
+                    last_n = zoom_params.get('last_n_epochs', 0)
+                    y_max = zoom_params.get('ylim_top')
+                    
+                    if last_n > 0:
+                        start_x = max(0, len(train_curve) - last_n)
+                        ax.set_xlim(start_x, len(train_curve))
+                    
+                    if y_max is not None:
+                        ax.set_ylim(0, y_max)
+
+                # Formatting
+                ax.set_title(f"{title} | Enc: {enc}")
+                ax.set_ylabel("MSE")
+                ax.grid(True, which='both', linestyle=':', alpha=0.5)
+                ax.legend(loc='upper right', fontsize='x-small')
+
+        plt.tight_layout()
+        
+        # Save file
+        os.makedirs(folder_path, exist_ok=True)
+        filename = f"{save_name}_{model_key}.png"
+        plt.savefig(os.path.join(folder_path, filename), bbox_inches='tight', dpi=150)
+        plt.close()
+
 def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_path, folder_path):
     """
     Plots Test MSE vs Encoding Size using the standard data_s/data_u dictionary format.
@@ -458,13 +476,15 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=False)
     
-    # We map specific labels to specific styles to keep the plot clean
-    style_map = {
-        'basic': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
-        'layered': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
-        'pca-based': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'},
-        'PCA': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'}
-    }
+    # # We map specific labels to specific styles to keep the plot clean
+    # style_map = {
+    #     'basic': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
+    #     'Basic-AE': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
+    #     'layered': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
+    #     'Layered-AE': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
+    #     'pca-based': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'},
+    #     'PCA': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'}
+    # }
 
     pipelines = [
         (ax1, data_s, "Pipeline: Trained on Scaled Data"),
@@ -473,6 +493,7 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
 
     for ax, data_type_dict, col_title in pipelines:
         for model_key, results_tuple in data_type_dict.items():
+            print(f"model_key is {model_key}")
             # Index 2 is the mse_dict: {enc_size: [mse_val]}
             mse_master_dict = results_tuple[au.TEST_MSE_IDX]
             
@@ -492,7 +513,8 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
             
             # Get style or use defaults
             style = style_map.get(model_key, {'color': 'gray', 'marker': 'x', 'label': model_key})
-            
+            if style['color'] == 'gray':
+                print(f'wtf whats the model key -> {model_key}')
             # Plot the line
             ax.plot(valid_encodings, y_values, 
                     label=style['label'], 
@@ -525,46 +547,18 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
     plt.savefig(output_path, bbox_inches="tight", dpi=150)
     plt.close()
 
+
 def plot_comprehensive_comparison_bars(data_s, data_u, encoding_sizes, title, save_path, folder_path):
-    """
-    Generates a vertical grid of bar charts comparing model performance (MSE) 
-    across different encoding sizes and preprocessing pipelines.
-
-    The function creates an (N x 2) grid of subplots where:
-    - Each row corresponds to a specific encoding size (latent dimension).
-    - The left column displays results for the 'Scaled' data pipeline.
-    - The right column displays results for the 'Raw' (Unscaled) data pipeline.
-    - Each bar within a subplot represents a specific model architecture 
-      (e.g., Basic AE, Layered AE, PCA).
-
-    Parameters:
-    -----------
-    data_s : dict
-        A dictionary containing results for the scaled pipeline. 
-        Expected format: {model_label: (train_history, eval_history, mse_dict)}
-        where mse_dict is {encoding_size: [mse_value]}.
-    data_u : dict
-        A dictionary containing results for the raw/unscaled pipeline.
-        Same format as data_s.
-    encoding_sizes : list of int
-        The list of latent dimensions (e.g., [2, 4, 8, 16, 32]) to be plotted as rows.
-    title : str
-        The main title for the entire figure.
-    save_path : str
-        The filename for the output image (e.g., 'comparison_grid.png').
-    folder_path : str or Path
-        The directory where the resulting plot will be saved.
-    """
     n_enc = len(encoding_sizes)
     fig, axes = plt.subplots(n_enc, 2, figsize=(14, 4 * n_enc), squeeze=False)
     
-    # Standard project colors
-    style_map = {
-        'basic': {'color': '#1f77b4', 'label': 'Basic AE'},
-        'layered': {'color': '#2ca02c', 'label': 'Layered AE'},
-        'pca-based': {'color': '#EC7063', 'label': 'PCA'},
-        'PCA': {'color': '#EC7063', 'label': 'PCA'}
-    }
+    # # Standard project colors
+    # style_map = {
+    #     'basic': {'color': '#5DADE2', 'label': 'Basic AE'},
+    #     'layered': {'color': 'green', 'label': 'Layered AE'},
+    #     'pca-based': {'color': '#EC7063', 'label': 'PCA'},
+    #     'PCA': {'color': '#EC7063', 'label': 'PCA'}
+    # }
 
     model_keys = list(data_s.keys())
     x = np.arange(len(model_keys))
@@ -605,7 +599,7 @@ def plot_comprehensive_comparison_bars(data_s, data_u, encoding_sizes, title, sa
     os.makedirs(folder_path, exist_ok=True)
     plt.savefig(os.path.join(folder_path, save_path), bbox_inches="tight", dpi=150)
     plt.close()
-    
+
 def plot_io_scatter(original, reconstructed, title, save_path, log_scale=False):
     """
     Optimized Reconstruction Scatter. 
