@@ -11,32 +11,38 @@ This project utilizes unsupervised deep learning (Autoencoders) and dimensionali
 The project is organized into modular components for model definitions, data processing, and analysis.
 
 ```text
-.
-├── core/                       # Core model and training logic
-│   ├── models/                 # Neural network architectures
-│   │   ├── ae_architectures.py # Basic and Layered AE definitions
-│   │   ├── components.py       # Reusable torch modules
-│   │   ├── mix_model.py        # Hybrid MixModel implementation
-│   │   └── model_factory.py    # Factory for instantiating models
-│   ├── engine.py               # GPU-accelerated Trainer class
-│   └── trainer_utils.py        # Experiment IO and checkpoint helpers
-├── data/                       # Dataset storage
-│   ├── real/                   # Raw clinical cfChIP-seq matrices
-│   └── synthetic/              # Generated synthetic mix data
-├── utils/                      # Helper modules
-│   ├── data_utils.py           # Scaling, tensor prep, and inverse scaling
-│   ├── pca_utils.py            # sklearn PCA wrappers and IO
-│   ├── plots_utils.py          # Tournament and sensitivity visualization
-│   └── analysis_utils.py       # Biological validation helpers
-├── experiments/                # (Auto-generated) Results and weights
-├── train_healthy.py            # Entry point for Phase 1 (Healthy library)
-├── train_disease_mix.py        # Entry point for Phase 2 (Disease tournament)
-├── disease_mix_analysis.py     # Biological validation for real data
-├── disease_mix_syn_analysis.py # Validation for synthetic benchmarks
-├── healthy_analysis.py         # Latent space and PCA analysis
-├── config.py                   # Global hyperparameters and DEVICE (MPS/CUDA)
-├── .gitignore                  # Exclusion rules for data and models
-└── README.MD                   # Project documentation
+cancer-signal-decomposition/
+├── core/
+│   ├── models/                 # Autoencoder architectures (healthy & disease)
+│   ├── engine.py               # Training / evaluation logic
+│   └── trainer_utils.py        # Training loop utilities
+├── data/                       # Raw and processed cfChIP-seq data
+├── latent/
+│   ├── latent_run.py           # Run latent space extraction
+│   └── latent_utils.py         # Latent-space analysis helpers
+├── outputs/
+│   ├── real_experiments/       # Results on real cfChIP-seq data
+│   │   ├── plots/              # Figures and visualizations
+│   │   └── trained_models/     # Saved trained model weights
+│   ├── synthetic_experiments/  # Results on synthetic mixed data
+│   │   ├── plots/              # Figures and visualizations
+│   │   └── trained_models/     # Saved trained model weights
+│   ├── disease_mix/            # Disease-mix model outputs
+│   └── healthy/                # Healthy model outputs
+├── sanity_checks/
+│   ├── check_theta.py          # Validate θ (disease fraction) behavior
+│   ├── count_data.py           # Dataset statistics and counts
+│   └── syn_data_create.py      # Synthetic data generation
+├── utils/
+│   ├── analysis_utils.py       # Shared analysis helpers
+│   ├── data_utils.py           # Data loading and preprocessing
+│   ├── pca_utils.py            # PCA fitting and transformations
+│   └── plots_utils.py          # Plotting utilities
+├── train_disease_mix.py        # Train disease autoencoder with mixing logic
+├── analyzer.py                 # General analysis entry point
+├── healthy_analysis.py         # Healthy model analysis
+├── disease_mix_analysis.py     # Disease-mix analysis on real data
+└── disease_mix_syn_analysis.py # Disease-mix analysis on synthetic data
 
 ```
 
