@@ -1,3 +1,5 @@
+import io
+import joblib
 import os
 import config as cfg
 import utils.analysis_utils as au
@@ -5,23 +7,22 @@ import utils.analysis_utils as au
 import utils.plots_utils as pu
 import torch
 import numpy as np
+from scipy import stats
 
 import pandas as pd
 
 SCALED = True
 UNSCALED = False
 
-def load_reconstruction_data(phase):
+def load_reconstruction_data():
     """
     Loads the validation data (Mixed Input and Clean Ground Truth).
     Matches your requested structure using config paths.
     """
-    if phase == "healthy":
-        mix_file = cfg.HEALTHY_GENES_PATH  # Input is pure healthy data
-        truth_file = cfg.HEALTHY_GENES_PATH
-    else:
-        mix_file = cfg.DISEASE_GENES_PATH  # Input is mixed data
-        truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
+    # 1. Define Paths
+    mix_file = cfg.DISEASE_GENES_PATH
+    # Assuming 'pure_disease_truth.csv' exists in your data folder
+    truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' 
 
     # 2. Validation
     if not mix_file.exists() or not truth_file.exists():
@@ -36,6 +37,124 @@ def load_reconstruction_data(phase):
     return df_mixed, df_pure
 
 
+def calculate_theta_invariant_correlation(truth_df, recon_df, theta_values):
+    """
+    Calculates the partial correlation between Truth and Recon, 
+    removing the variance explained by the mixing proportion (theta).
+    """
+    # Flatten everything to 1D arrays for a global check
+    y_true = truth_df.values.flatten()
+    y_pred = recon_df.values.flatten()
+    
+    # Repeat theta for every gene in every sample to match lengths
+    num_genes = truth_df.shape[1]
+    theta_repeated = np.repeat(theta_values, num_genes)
+
+    # 1. Standard Correlation (Pearson)
+    r_standard, _ = stats.pearsonr(y_true, y_pred)
+
+    # 2. Partial Correlation Logic:
+    # We want the correlation between (y_true | theta) and (y_pred | theta)
+    # Step A: Residuals of truth regressed on theta
+    res_true = y_true - stats.linregress(theta_repeated, y_true).slope * theta_repeated
+    # Step B: Residuals of pred regressed on theta
+    res_pred = y_pred - stats.linregress(theta_repeated, y_pred).slope * theta_repeated
+    
+    # Step C: Correlation of the residuals
+    r_partial, _ = stats.pearsonr(res_true, res_pred)
+
+    print(f"Standard R: {r_standard:.4f}")
+    print(f"Partial R (Controlled for Theta): {r_partial:.4f}")
+    
+    return r_standard, r_partial
+
+def get_best_model_tag(phase, scale_bool, encoding_size):
+    """
+    Scans the trained_models folder to find the model with the 
+    lowest MSE for a specific encoding size.
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    root = cfg.get_path(phase, folder_type=cfg.MODELS_SUBFOLDER) / tag
+    
+    best_mse = float('inf')
+    best_tag = None
+    
+    # Iterate through all model folders (mix_H-ae_D-ae, etc.)
+    for model_folder in root.iterdir():
+        if not model_folder.is_dir(): continue
+        
+        meta_path = model_folder / f"enc_{encoding_size}" / "best_meta.json"
+        results_path = model_folder / f"enc_{encoding_size}" / "results.json"
+        
+        # Check AE meta or PCA results
+        for p in [meta_path, results_path]:
+            if p.exists():
+                data = io.load_results(p.parent, p.name)
+                # Standardize keys: 'best_val' for AE, 'val_mse' for PCA
+                mse = data.get('best_val', data.get('val_mse', float('inf')))
+                
+                if mse < best_mse:
+                    best_mse = mse
+                    best_tag = model_folder.name
+                    
+    return best_tag
+
+# import seaborn as sns
+# import matplotlib.pyplot as plt
+
+# def plot_decoder_weights_heatmap(model, gene_names, base_name, enc):
+#     """
+#     Creates a heatmap of the decoder weights to visualize gene-latent connections.
+#     """
+#     # Extract weights from the final layer of the disease decoder
+#     weights = model.disease_model.decoder[-1].weight.data.cpu().numpy()
+    
+#     # Handle Transpose if necessary (Output Genes x Latent Neurons)
+#     if weights.shape[0] != len(gene_names):
+#         weights = weights.T
+        
+#     # Select top 50 most variable genes in the weights for better visibility
+#     weight_variance = np.var(weights, axis=1)
+#     top_genes_idx = np.argsort(weight_variance)[-50:]
+#     filtered_weights = weights[top_genes_idx, :]
+#     filtered_names = [gene_names[i] for i in top_genes_idx]
+
+#     plt.figure(figsize=(12, 10))
+#     sns.heatmap(filtered_weights, xticklabels=[f"L{i}" for i in range(enc)],
+#                 yticklabels=filtered_names, cmap="RdBu_r", center=0)
+    
+#     plt.title(f"Decoder Weight Connections: {base_name} (Enc {enc})")
+    
+#     # Save into the specific model's plot folder
+#     save_dir = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / base_name
+#     plt.savefig(save_dir / f"weights_heatmap_enc{enc}.png")
+#     plt.close()
+
+def analyze_decoder_gene_signatures(model, gene_names, top_n=10):
+    """
+    Extracts weights from the decoder to identify which genes 
+    are most influenced by each latent dimension.
+    """
+    # Navigate to the disease decoder weights
+    # Assuming UniversalMixModel -> disease_model -> decoder -> last layer
+    decoder_weights = model.disease_model.decoder[-1].weight.data.cpu().numpy()
+    
+    # Shape: (input_dim, latent_dim) - if it's (latent, input), transpose it
+    if decoder_weights.shape[0] != len(gene_names):
+        decoder_weights = decoder_weights.T
+
+    signatures = {}
+    for i in range(decoder_weights.shape[1]):
+        latent_vector = decoder_weights[:, i]
+        
+        # Get indices of the largest positive weights
+        top_indices = np.argsort(latent_vector)[-top_n:][::-1]
+        top_genes = [(gene_names[idx], latent_vector[idx]) for idx in top_indices]
+        
+        signatures[f"Latent_{i}"] = top_genes
+        
+    return signatures
+
 def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     """
     One function to rule them all. 
@@ -48,13 +167,13 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     import matplotlib.pyplot as plt
 
     # 1. Load Data & Tensors
-    input_df, truth_df = load_reconstruction_data(phase)
+    input_df, truth_df = load_reconstruction_data()
     if input_df is None: return
     
     tag = "scaled" if scale_bool else "unscaled"
     input_size = input_df.shape[1]
     input_tensor = torch.tensor(input_df.values).float().to("cpu")
-    # log_truth = np.log1p(truth_df.values).flatten()
+    log_truth = np.log1p(truth_df.values).flatten()
 
     # 2. Determine if we are looping through Tournament Bases (Disease) or just Labels (Healthy)
     # This detects if labels_dict is {Base: {Models}} or just {Models}
@@ -98,20 +217,32 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
                         model = ModelFactory.create_model(folder_tag, input_size, enc)
 
                     # --- LOAD WEIGHTS & INFER ---
-                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / "model.pt"
-                    if not model_path.exists():
-                        ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
+                    is_pca = "pca" in folder_tag.lower()
+                    ext = "model.joblib" if is_pca else "model.pt"
+                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / ext
 
-                    checkpoint = torch.load(model_path, map_location="cpu")
-                    state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
-                    model.load_state_dict(state_dict)
+                    if not model_path.exists():
+                        ax.text(0.5, 0.5, f"Missing:\n{folder_tag}", ha='center')
+                        continue
+
+                    if is_pca:
+                        # PCA doesn't need state_dict loading, the Factory handles the object
+                        # But we need to ensure the d_type is loaded if it's a standalone PCA
+                        checkpoint = joblib.load(model_path)
+                        # If the factory returns a fresh object, you might need to assign 
+                        # the loaded components to it here.
+                    else:
+                        checkpoint = torch.load(model_path, map_location="cpu")
+                        state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+                        model.load_state_dict(state_dict)
+
                     model.eval()
 
                     with torch.no_grad():
                         output = model(input_tensor)
                         reconstructed = output[0] if isinstance(output, (tuple, list)) else output
                     
-                    log_recon = np.log1p(reconstructed.numpy()).flatten()
+                    # log_recon = np.log1p(reconstructed.numpy()).flatten()
                     recon_raw = reconstructed.numpy().flatten()
                     truth_raw = truth_df.values.flatten()
                     # corr = np.corrcoef(log_truth, log_recon)[0, 1]
@@ -137,58 +268,8 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
         plt.savefig(full_path, dpi=150)
         plt.close()
 
-def collect_phase_data(phase, model_labels):
-    """
-    getting trained models history and data from models
-    
-    :param phase: 'heathy', 'disease' or whatever option
-    :param model_labels: possible models to retreive data from
-    """
 
-    # data dictionaries to collect
-    data_s = {}
-    data_u = {}
-
-    for label, model_tag in model_labels.items():
-        data_s[label] = au.load_data_for_analysis(SCALED, model_tag, phase)
-        data_u[label] = au.load_data_for_analysis(UNSCALED, model_tag, phase)
-
-    return data_s, data_u
-
-
-
-def print_data(data_s, data_u):
-    """
-    Prints a summary of the loaded data structure for both Scaled and Unscaled sets.
-    debug function
-    """
-    datasets = {"SCALED": data_s, "UNSCALED": data_u}
-    
-    for label, ds in datasets.items():
-        print(f"\n{'='*20} {label} DATA {'='*20}")
-        
-        for model_name, model_tuple in ds.items():
-            # Unpacking based on analysis_utils structure
-            train_dict = model_tuple[au.TRAIN_LOSS_IDX]
-            eval_dict  = model_tuple[au.EVAL_LOSS_IDX]
-            mse_dict   = model_tuple[au.TEST_MSE_IDX]
-            
-            print(f"\nModel: {model_name}")
-            
-            # Since all dicts share the same encoding keys
-            for enc in train_dict.keys():
-                # Get lengths or values for a quick overview
-                t_len = len(train_dict[enc])
-                e_len = len(eval_dict[enc])
-                # Test MSE is usually a single-item list
-                mse_val = mse_dict[enc][0] if isinstance(mse_dict[enc], list) else mse_dict[enc]
-                
-                print(f"  [Enc {enc:3}]: Train Pts: {t_len:4} | Eval Pts: {e_len:4} | Test MSE: {mse_val:.6f}")
-
-
-
-
-def analyze_disease_mix(phase='disease'):
+def interpret_disease_mix(phase='disease'):
 
     # all possible combinations of healthy baselines with disease
     disease_mix_labels = {
@@ -215,64 +296,20 @@ def analyze_disease_mix(phase='disease'):
 
     for baseline, labels in disease_mix_labels.items():
 
-        # collect data for the current baseline
-        data_s, data_u = collect_phase_data(phase, model_labels=labels)
-
-        # getting mse values for plotting
-        for data_type in [data_s, data_u]:
-            for model_name in data_type:
-
-                # extracting mse
-                mse_dict = data_type[model_name][au.TEST_MSE_IDX]
-
-                # make sure mse is wrapped in a list for plot_utils function needs
-                for enc in mse_dict:
-                    val = mse_dict[enc]
-                    if not isinstance(val, (list, np.ndarray)):
-                        mse_dict[enc] = [val]
-
-        # group-level save path per baseline
-        group_save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{baseline}"
-        group_save_path.mkdir(parents=True, exist_ok=True)
-
-        zoom = {
-            'last_n_epochs': 300,
-            'ylim_top': None
-        }
-
-        # generating plots once per baseline
-        print(f"Generating Group Plots for: {baseline}")
-        # pu.plot_test_mse_bars(data_s, data_u, f'mse_bar_plot_H-{baseline}', group_save_path)
-        # pu.plot_mse_vs_encoding(data_s, data_u, f'mse_vs_enc_size_H-{baseline}', group_save_path)
-        # pu.plot_learning_curves(data_s, data_u, f'learning_curve_H-{baseline}', group_save_path, zoom_params=zoom)
-        # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', group_save_path)
-
-                    ## Sarina plot additions ##
-        pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=False, zoom_params=None)    # <--- No zoom
-        
-        ## with pca train/test vals too
-        pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=True, zoom_params=None)    # <--- No zoom
-
-        pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, f'MSE Performance: H-{baseline}', f'mse_line_comparison_H-{baseline}.png', group_save_path)
-
-        pu.plot_comprehensive_comparison_bars(
-            data_s, data_u,
-            encoding_sizes=cfg.ENCODING_SIZES,
-            title=f"Disease Tournament: Impact of AE vs PCA (Healthy Base = {baseline})",
-            save_path=f"{baseline.lower()}_base_tournament_bars.png",
-            folder_path=group_save_path,
-#            labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
-        )
         ##unscaled data reconstructions
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
                                     scale_bool=False, save_path="reconstructed_grid", 
                                     )
+        
+        
 
 
 
 
 
-def analyze_healthy_model(phase='healthy'):
+
+
+def interpret_healthy_model(phase='healthy'):
 
     # setting labels
     model_labels = {
@@ -280,33 +317,7 @@ def analyze_healthy_model(phase='healthy'):
         'Layered-AE': 'ae_layered',
         'PCA': 'pca'
         }
-
-    zoom = {
-        'last_n_epochs': 100, 
-        'ylim_top': 1000     # Adjust this value based on your typical final MSE
-    }
-
-    # getting data and path
-    data_s, data_u = collect_phase_data(phase, model_labels=model_labels)
-    save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER)
-
-
-    # plotting
-    # pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
-    # pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
-    # pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
-    # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
-                ## Sarina plot additions ##
-    pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
-    
-    ## with pca train/test vals too
-    pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=None)    # <--- No zoom
-
-    pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, 'Healthy Model Performance', 'mse_line_comparison.png', save_path)
-    pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
-                                                          save_path="final_architecture_vs_scaling_bars.png",
-                                                          folder_path=save_path)
-   
+ 
     analyze_reconstruction_grid(model_labels, phase='healthy', 
                                 scale_bool=False, 
                                 save_path="reconstructed_grid")
@@ -318,8 +329,8 @@ if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
     print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    analyze_healthy_model()
-    analyze_disease_mix()
+    interpret_healthy_model()
+    interpret_disease_mix()
 
     # if cfg.SYNTHETIC_DATA:    
     #     analyze_reconstruction()
