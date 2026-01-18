@@ -1,3 +1,4 @@
+import joblib
 import torch
 import config as cfg
 from core.models.model_factory import ModelFactory
@@ -71,10 +72,35 @@ def run_cross_architecture_tournament(mode_val):
                 pca_bench_train_mse = bench_trainer.get_mse(train_d) 
                 
                 out_dir = cfg.get_path("disease", tag, "mix_H-pca_D-pca", enc, folder_type=cfg.MODELS_SUBFOLDER)
+                pca_d_path = out_dir / "model.joblib"
+                joblib.dump(pca_d_obj, pca_d_path) #
                 io.save_results(
                     {"val_mse": pca_bench_val_mse, "train_mse": pca_bench_train_mse},
                     out_dir, "results.json"
                     )
+            # --- HYBRID TOURNAMENT: Healthy AE + Disease PCA ---
+            for h_name, h_obj in healthy_library:
+                if h_name == "pca": continue # Already handled by benchmark
+                
+                label = f"mix_H-{h_name}_D-pca"
+                print(f"Testing Hybrid: {label} | {tag} | Enc: {enc}")
+                
+                # Use the same disease PCA we just trained for this encoding size
+                mix_model = ModelFactory.create_mix_model(h_obj, pca_d_obj)
+                
+                # Evaluate
+                bench_trainer = Trainer(mix_model, scaler=scaler_d, device=cfg.DEVICE)
+                val_mse = bench_trainer.get_mse(test_d)
+                train_mse = bench_trainer.get_mse(train_d)
+                
+                # Save folder
+                out_dir = cfg.get_path("disease", tag, label, enc, folder_type=cfg.MODELS_SUBFOLDER)
+                
+                # Save results for load_data_for_analysis
+                io.save_results({"val_mse": val_mse, "train_mse": train_mse}, out_dir, "results.json")
+                
+                # Save the Disease PCA object so the grid can load it
+                joblib.dump(pca_d_obj, out_dir / "model.joblib")
 
             # --- TOURNAMENT: CROSS-ARCHITECTURE AE MIX ---
             for d_arch in cfg.MODEL_TYPES:

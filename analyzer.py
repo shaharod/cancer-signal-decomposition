@@ -34,7 +34,7 @@ def load_reconstruction_data():
     return df_mixed, df_pure
 
 
-def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path, folder_path):
+def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     """
     One function to rule them all. 
     If phase='disease', it handles 'mix' parsing. 
@@ -67,8 +67,9 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path, folde
         n_cols = len(models)
         
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
-        fig.suptitle(f"{phase.capitalize()} Reconstruction: {base_name} ({tag})", fontsize=16, fontweight='bold')
-
+        fig.suptitle(f"Tournament Results: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
+                     fontsize=20, fontweight='bold', y=0.98)
+                     
         for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
                 ax = axes[row_idx, col_idx]
@@ -128,8 +129,9 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path, folde
                     ax.text(0.5, 0.5, f"Error Loading Model", ha='center', color='red')
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        os.makedirs(folder_path, exist_ok=True)
-        full_path = os.path.join(folder_path, f"{save_path}_D-{base_name}_{tag}")
+        folder = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
+        os.makedirs(folder, exist_ok=True)
+        full_path = os.path.join(folder, f"{save_path}_{tag}")
         plt.savefig(full_path, dpi=150)
         plt.close()
 
@@ -262,7 +264,7 @@ def analyze_disease_mix(phase='disease'):
         ##unscaled data reconstructions
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
                                     scale_bool=False, save_path="reconstructed_grid", 
-                                    folder_path=group_save_path)
+                                    )
 
 
 
@@ -305,8 +307,7 @@ def analyze_healthy_model(phase='healthy'):
    
     analyze_reconstruction_grid(model_labels, phase='healthy', 
                                 scale_bool=False, 
-                                save_path="reconstructed_grid",
-                                folder_path=save_path)
+                                save_path="reconstructed_grid")
 
 
 
