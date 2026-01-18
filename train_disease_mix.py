@@ -102,14 +102,14 @@ if __name__ == "__main__":
         print("="*40)
         
         # Set the flags so get_path and get_ready_tensors behave correctly
-        if mode == "true":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = False
-        elif mode == "random":
-            cfg.RANDOM_THETA_EXP = True
-            cfg.FIXED_THETA_EXP = False
-        elif mode == "fixed":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = True
+        # if mode == "true":
+        #     cfg.RANDOM_THETA_EXP = False
+        #     cfg.FIXED_THETA_EXP = False
+        # elif mode == "random":
+        #     cfg.RANDOM_THETA_EXP = True
+        #     cfg.FIXED_THETA_EXP = False
+        # elif mode == "fixed":
+        #     cfg.RANDOM_THETA_EXP = False
+        #     cfg.FIXED_THETA_EXP = True
             
-        run_cross_architecture_tournament(mode)
+        run_cross_architecture_tournament('random')

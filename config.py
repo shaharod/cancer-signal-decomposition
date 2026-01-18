@@ -16,8 +16,8 @@ DATA_PATH = PROJECT_ROOT / 'data'
 
 
 # ---- Global Decisions ----
-RANDOM_THETA_EXP = False
-FIXED_THETA_EXP = True
+RANDOM_THETA_EXP = True
+FIXED_THETA_EXP = False
 SYNTHETIC_DATA = False
 DEVICE = 'mps' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
