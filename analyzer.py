@@ -34,7 +34,7 @@ def load_reconstruction_data():
     return df_mixed, df_pure
 
 
-def analyze_reconstruction_grid(labels_dict, phase='healthy', scale_bool=True):
+def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path, folder_path):
     """
     One function to rule them all. 
     If phase='disease', it handles 'mix' parsing. 
@@ -128,9 +128,10 @@ def analyze_reconstruction_grid(labels_dict, phase='healthy', scale_bool=True):
                     ax.text(0.5, 0.5, f"Error Loading Model", ha='center', color='red')
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"grid_recon_{base_name}_{tag}.png"
-        plt.savefig(save_path, dpi=150); plt.close()
-
+        os.makedirs(folder_path, exist_ok=True)
+        full_path = os.path.join(folder_path, f"{save_path}_D-{base_name}_{tag}")
+        plt.savefig(full_path, dpi=150)
+        plt.close()
 
 def collect_phase_data(phase, model_labels):
     """
@@ -259,7 +260,9 @@ def analyze_disease_mix(phase='disease'):
 #            labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
         )
         ##unscaled data reconstructions
-        analyze_reconstruction_grid(disease_mix_labels, phase='disease', scale_bool=False)
+        analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
+                                    scale_bool=False, save_path="reconstructed_grid", 
+                                    folder_path=group_save_path)
 
 
 
@@ -300,7 +303,10 @@ def analyze_healthy_model(phase='healthy'):
                                                           save_path="final_architecture_vs_scaling_bars.png",
                                                           folder_path=save_path)
    
-    analyze_reconstruction_grid(model_labels, phase='healthy', scale_bool=False)
+    analyze_reconstruction_grid(model_labels, phase='healthy', 
+                                scale_bool=False, 
+                                save_path="reconstructed_grid",
+                                folder_path=save_path)
 
 
 
