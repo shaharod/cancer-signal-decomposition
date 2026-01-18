@@ -33,80 +33,6 @@ def load_reconstruction_data():
     
     return df_mixed, df_pure
 
-# FIXME: Reconstruction Plot Logic
-# - cant load the model for reconstruction, not sure im doing it correctly
-# - not sure if its taking best value or what, cant remember what it was suppose to be
-def analyze_reconstruction(phase='disease'):
-    """
-    Loads one specific model (e.g., Best Basic-AE) and plots its reconstruction
-    vs the Ground Truth.
-    """
-    print(f"\n{'='*20} Generating Reconstruction Scatter {'='*20}")
-
-    # --- IMPORT MODEL CLASS HERE ---
-    # Adjust this line if your class is in a different file (e.g. 'from models import AEBasic')
-    from core.models.ae_architectures import Basic_AE
-
-    # 1. Load Data
-    input_df, truth_df = load_reconstruction_data()
-    if input_df is None: return
-
-    # Convert to Tensor 
-    # We take the first 500 samples for the scatter plot
-    n_samples = 500
-    input_slice = input_df.iloc[:n_samples]
-    truth_slice = truth_df.iloc[:n_samples]
-
-    input_tensor = torch.tensor(input_slice.values).float().to(cfg.DEVICE)
-    truth_tensor = torch.tensor(truth_slice.values).float().to(cfg.DEVICE)
-
-    # 2. Select Model to Visualize
-    target_enc = 8
-    model_type = 'mix_H-pca_D-ae_basic'
-    scale_tag  = 'unscaled' # Warning: Ensure folder name matches exactly (Case Sensitive)
-
-    # Construct path to the saved model file
-    model_path = cfg.get_path(phase, scale_tag, model_type, target_enc, cfg.MODELS_SUBFOLDER) / "model.pt"
-    
-    if not model_path.exists():
-        print(f"Skipping Reconstruction: Model not found at {model_path}")
-        return
-
-    # 3. Load Model Architecture & Weights (THE FIX)
-    # We must create the empty model structure first!
-    model = Basic_AE(input_size=input_tensor.shape[1], encoding_size=target_enc)#, h1=cfg.H1, h2=cfg.H2)
-    model.to(cfg.DEVICE)
-
-    # Load the weights from the file (which is a dictionary, not a model object)
-    checkpoint = torch.load(model_path, map_location=cfg.DEVICE)
-    
-    # Handle both full checkpoint dicts and direct state_dicts
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        model.load_state_dict(checkpoint)
-
-    model.eval()
-
-    # 4. Run Inference
-    with torch.no_grad():
-        reconstructed, _ = model(input_tensor)
-    
-    original_np = truth_tensor.cpu().detach().numpy()
-    reconstructed_np = reconstructed.cpu().detach().numpy()
-    # 5. Plot
-    save_filename = f"reconstruction_hex_{model_type}_{target_enc}.png"
-    save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / save_filename
-    
-    pu.plot_io_scatter(
-        original=original_np, 
-        reconstructed=reconstructed_np, 
-        title=f"Global Reconstruction: {model_type} (Enc {target_enc})", 
-        save_path=save_path,
-        log_scale=False  # Recommended for gene expression
-    )
-    
-    print(f"Saved reconstruction plot to {save_path}")
 
 def analyze_reconstruction_grid(labels_dict, phase='healthy', scale_bool=True):
     """
@@ -335,7 +261,7 @@ def analyze_disease_mix(phase='disease'):
         ##unscaled data reconstructions
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', scale_bool=False)
 
-    
+
 
 
 
