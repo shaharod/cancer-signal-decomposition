@@ -330,12 +330,12 @@ def analyze_disease_mix(phase='disease'):
             title=f"Disease Tournament: Impact of AE vs PCA (Healthy Base = {baseline})",
             save_path=f"{baseline.lower()}_base_tournament_bars.png",
             folder_path=group_save_path,
-            labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
+#            labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
         )
         ##unscaled data reconstructions
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', scale_bool=False)
 
-
+    
 
 
 
@@ -383,10 +383,10 @@ if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
     print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    # analyze_healthy_model()
-    # analyze_disease_mix()
+    analyze_healthy_model()
+    analyze_disease_mix()
 
-    if cfg.SYNTHETIC_DATA:    
-        analyze_reconstruction()
+    # if cfg.SYNTHETIC_DATA:    
+    #     analyze_reconstruction()
 
 
