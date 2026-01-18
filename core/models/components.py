@@ -32,6 +32,9 @@ class AEComponent(nn.Module):
     def encoder(self, x):
         # Routes directly to the internal AE encoder
         return self.ae.encoder(x)
+    
+    def decoder(self, z):
+        return self.ae.decoder(z)
 
     def forward(self, x: torch.Tensor):
         # Standardizes all AE outputs to (recon, latent)

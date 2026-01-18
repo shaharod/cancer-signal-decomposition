@@ -111,7 +111,7 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
                         output = model(input_tensor)
                         reconstructed = output[0] if isinstance(output, (tuple, list)) else output
                     
-                    log_recon = np.log1p(reconstructed.numpy()).flatten()
+                    # log_recon = np.log1p(reconstructed.numpy()).flatten()
                     recon_raw = reconstructed.numpy().flatten()
                     truth_raw = truth_df.values.flatten()
                     # corr = np.corrcoef(log_truth, log_recon)[0, 1]
@@ -317,7 +317,7 @@ def analyze_healthy_model(phase='healthy'):
 if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
-    print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
+    # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
     analyze_healthy_model()
     analyze_disease_mix()
 

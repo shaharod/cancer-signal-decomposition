@@ -99,37 +99,6 @@ def get_best_model_tag(phase, scale_bool, encoding_size):
                     
     return best_tag
 
-# import seaborn as sns
-# import matplotlib.pyplot as plt
-
-# def plot_decoder_weights_heatmap(model, gene_names, base_name, enc):
-#     """
-#     Creates a heatmap of the decoder weights to visualize gene-latent connections.
-#     """
-#     # Extract weights from the final layer of the disease decoder
-#     weights = model.disease_model.decoder[-1].weight.data.cpu().numpy()
-    
-#     # Handle Transpose if necessary (Output Genes x Latent Neurons)
-#     if weights.shape[0] != len(gene_names):
-#         weights = weights.T
-        
-#     # Select top 50 most variable genes in the weights for better visibility
-#     weight_variance = np.var(weights, axis=1)
-#     top_genes_idx = np.argsort(weight_variance)[-50:]
-#     filtered_weights = weights[top_genes_idx, :]
-#     filtered_names = [gene_names[i] for i in top_genes_idx]
-
-#     plt.figure(figsize=(12, 10))
-#     sns.heatmap(filtered_weights, xticklabels=[f"L{i}" for i in range(enc)],
-#                 yticklabels=filtered_names, cmap="RdBu_r", center=0)
-    
-#     plt.title(f"Decoder Weight Connections: {base_name} (Enc {enc})")
-    
-#     # Save into the specific model's plot folder
-#     save_dir = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / base_name
-#     plt.savefig(save_dir / f"weights_heatmap_enc{enc}.png")
-#     plt.close()
-
 def analyze_decoder_gene_signatures(model, gene_names, top_n=10):
     """
     Extracts weights from the decoder to identify which genes 
@@ -173,7 +142,7 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     tag = "scaled" if scale_bool else "unscaled"
     input_size = input_df.shape[1]
     input_tensor = torch.tensor(input_df.values).float().to("cpu")
-    log_truth = np.log1p(truth_df.values).flatten()
+    # log_truth = np.log1p(truth_df.values).flatten()
 
     # 2. Determine if we are looping through Tournament Bases (Disease) or just Labels (Healthy)
     # This detects if labels_dict is {Base: {Models}} or just {Models}
@@ -268,9 +237,177 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
         plt.savefig(full_path, dpi=150)
         plt.close()
 
+import joblib
+import torch
+from core.models.model_factory import ModelFactory
+
+def load_revived_model(h_type, d_type=None, enc=8, scale_bool=False):
+    """
+    Rebuilds a standalone Healthy model OR a Disease Mix model.
+    Handles both PyTorch (.pt) and PCA (.joblib) formats.
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    input_size = 1000  # For your synthetic data
+
+    # Helper to load a single component (Healthy or Disease)
+    def prepare_component(m_type, phase, folder_tag):
+        path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER)
+        is_pca = m_type.lower() == 'pca'
+        ext = "model.joblib" if is_pca else "model.pt"
+        
+        if not (path / ext).exists():
+            return None
+
+        if is_pca:
+            return joblib.load(path / ext)
+        else:
+            obj = ModelFactory.create_model(m_type, input_size, enc)
+            checkpoint = torch.load(path / ext, map_location="cpu")
+            if isinstance(checkpoint, dict):
+                # Try different common keys used in your project
+                if 'model_state_dict' in checkpoint:
+                    state_dict = checkpoint['model_state_dict']
+                elif 'best_state' in checkpoint:
+                    state_dict = checkpoint['best_state']
+                else:
+                    # If it's a dict but neither key exists, 
+                    # it's likely the state_dict itself
+                    state_dict = checkpoint
+            else:
+                # If it's not a dict, it's the raw state_dict
+                state_dict = checkpoint
+                obj.load_state_dict(state_dict)
+            obj.eval()
+            return obj
+
+    # Logic for Mix vs Standalone
+    if d_type:
+        # Load Healthy base and Disease component for a Mix
+        h_obj = prepare_component(h_type, "healthy", h_type)
+        mix_tag = f"mix_H-{h_type}_D-{d_type}"
+        d_obj = prepare_component(d_type, "disease", mix_tag)
+        
+        if h_obj and d_obj:
+            return ModelFactory.create_mix_model(h_obj, d_obj)
+    else:
+        # Load Standalone Healthy
+        return prepare_component(h_type, "healthy", h_type)
+    
+    return None
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def plot_decoder_weights_heatmap(model, base_name, d_type, enc):
+    """
+    Extracts weights from the wrapped AE disease component.
+    """
+    try:
+        # 1. Access the disease wrapper (UniversalMixModel.disease)
+        disease_wrapper = model.disease 
+        
+        # 2. Access the inner AE (AEComponent.ae)
+        inner_ae = disease_wrapper.ae
+        
+        # 3. Call the decoder method to get the Sequential block
+        decoder_block = inner_ae.decoder
+        
+        # If it's a method, we might need to check if it's the sequential or needs a call
+        if hasattr(decoder_block, '__getitem__'):
+            # It's likely a Sequential or ModuleList
+            last_layer = decoder_block[-1]
+        else:
+            # It's a direct layer
+            last_layer = decoder_block
+
+        weights = last_layer.weight.data.cpu().numpy()
+        
+    except Exception as e:
+        print(f"Extraction failed for {d_type}: {e}")
+        return
+
+    # Standard Heatmap Plotting logic follows...
+    if weights.shape[0] != 1000: weights = weights.T
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(weights, cmap="RdBu_r", center=0)
+    plt.axhline(500, color='black', linestyle='--')
+    plt.title(f"Disease Gene Signatures: {base_name} | {d_type}")
+    save_dir = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(save_dir / f"decoder_heatmap_D-{d_type}_enc{enc}.png")
+    plt.close()
+
+def run_comprehensive_analysis():
+    gene_names = [f"Gene_{i}" for i in range(1000)]
+    theta_values = pd.read_csv(cfg.THETA_PATH).values.flatten()
+    input_df, truth_df = load_reconstruction_data()
+
+    # Define the "Tournament" combinations we want to deep-dive into
+    architectures = [('pca', 'pca'), ('ae_layered', 'ae_layered'), ('ae_basic', 'ae_basic')]
+    
+    for h_arch, d_arch in architectures:
+        for enc in cfg.ENCODING_SIZES:
+            # 1. Revive the model
+            model = load_revived_model(h_arch, d_arch, enc)
+            if model is None: continue
+
+            # 2. Extract Latent/Weight Insights (Interpretability)
+            if hasattr(model, 'disease_model'): # If it's a Mix with an AE disease component
+                # Heatmap
+                plot_decoder_weights_heatmap(model, gene_names, f"H-{h_arch}_D-{d_arch}", enc)
+                # Signatures
+                sigs = analyze_decoder_gene_signatures(model, gene_names)
+
+            # 3. Perform Statistical Validation
+            with torch.no_grad():
+                input_tensor = torch.tensor(input_df.values).float()
+                recon = model(input_tensor)
+                recon_df = pd.DataFrame(recon.numpy(), columns=truth_df.columns)
+                
+            # Partial Correlation (Theta-Invariant)
+            r_std, r_inv = calculate_theta_invariant_correlation(truth_df, recon_df, theta_values)
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+def save_performance_comparison(results_list):
+    """
+    Creates and saves a bar plot comparing Partial R for all models.
+    """
+    # Convert the list of results to a DataFrame
+    df = pd.DataFrame(results_list)
+    
+    plt.figure(figsize=(12, 7))
+    sns.set_style("whitegrid")
+    
+    # Create the bar plot
+    ax = sns.barplot(data=df, x="h_arch", y="partial_r", hue="d_arch", palette="viridis")
+    
+    # Add labels and title
+    plt.title("Tournament Performance: Partial Correlation (Controlled for Theta)", fontsize=15)
+    plt.ylabel("Partial Correlation (R)", fontsize=12)
+    plt.xlabel("Healthy Base Architecture", fontsize=12)
+    plt.ylim(-0.1, 1.1) # Set limits to see the 0 and 1 clearly
+    
+    # Add the R values on top of the bars
+    for p in ax.patches:
+        ax.annotate(format(p.get_height(), '.2f'), 
+                   (p.get_x() + p.get_width() / 2., p.get_height()), 
+                   ha = 'center', va = 'center', 
+                   xytext = (0, 9), 
+                   textcoords = 'offset points')
+
+    # Save it in the disease plots folder
+    save_path = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / "tournament_summary_plot.png"
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    print(f"✅ Performance summary saved to: {save_path}")
+    plt.close()
 
 def interpret_disease_mix(phase='disease'):
 
+    gene_names = [f"Gene_{i}" for i in range(1000)]
+    theta_df = pd.read_csv(cfg.THETA_PATH)
+    theta_values = pd.to_numeric(theta_df.iloc[:, -1], errors='coerce').dropna().values
+    input_df, truth_df = load_reconstruction_data()
     # all possible combinations of healthy baselines with disease
     disease_mix_labels = {
         'PCA':
@@ -292,19 +429,49 @@ def interpret_disease_mix(phase='disease'):
             "pca-based": "mix_H-ae_layered_D-pca"
         }
     }
+    arch_map = {
+        'PCA': 'pca', 
+        'AE-Basic': 'ae_basic', 
+        'AE-Layered': 'ae_layered'
+    }
 
-
-    for baseline, labels in disease_mix_labels.items():
+    # for baseline, labels in disease_mix_labels.items():
 
         ##unscaled data reconstructions
-        analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
+    analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
                                     scale_bool=False, save_path="reconstructed_grid", 
                                     )
+    all_results = []
+    for base_label, models in disease_mix_labels.items():
+        h_arch = arch_map[base_label]
         
-        
+        for model_label, folder_tag in models.items():
+            d_arch = folder_tag.split("_D-")[-1]
+            
+            for enc in cfg.ENCODING_SIZES:
+                model = load_revived_model(h_arch, d_arch, enc)
+                if model is None: continue
 
-
-
+                # 1. Biological Proof: Heatmap of Gene Connections
+                if d_arch != 'pca':
+                    plot_decoder_weights_heatmap(model, base_label, d_arch, enc)
+                
+                # 2. Statistical Proof: Theta-Invariant Correlation
+                with torch.no_grad():
+                    input_tensor = torch.tensor(input_df.values).float()
+                    output = model(input_tensor)
+                    recon = output[0] if isinstance(output, tuple) else output
+                    recon_df = pd.DataFrame(recon.numpy(), columns=truth_df.columns)
+                # print(theta_values)
+                r_std, r_partial = calculate_theta_invariant_correlation(truth_df, recon_df, theta_values)
+                print(f"Validated {folder_tag} Enc {enc}: Partial R = {r_partial:.4f}")   
+                all_results.append({
+                'h_arch': base_label,
+                'd_arch': folder_tag.split("_D-")[-1],
+                'partial_r': r_partial,
+                'enc': enc
+                })
+    save_performance_comparison(all_results)
 
 
 
@@ -328,8 +495,8 @@ def interpret_healthy_model(phase='healthy'):
 if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
-    print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    interpret_healthy_model()
+    # print(f'model type is: 'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
+    # interpret_healthy_model()
     interpret_disease_mix()
 
     # if cfg.SYNTHETIC_DATA:    
