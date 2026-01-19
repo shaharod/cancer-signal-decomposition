@@ -178,12 +178,12 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
                                 obj.mean_, obj.n_components_ = np.zeros(input_size), enc
                                 obj.components_ = np.zeros((enc, input_size))
                                 return obj
-                            return ModelFactory.create_model(m_type, input_size, enc)
+                            return ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
 
                         model = ModelFactory.create_mix_model(prepare_obj(h_type), prepare_obj(d_type))
                     else:
                         # Healthy / Standalone Logic
-                        model = ModelFactory.create_model(folder_tag, input_size, enc)
+                        model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
 
                     # --- LOAD WEIGHTS & INFER ---
                     is_pca = "pca" in folder_tag.lower()
@@ -261,7 +261,7 @@ def load_revived_model(h_type, d_type=None, enc=8, scale_bool=False):
         if is_pca:
             return joblib.load(path / ext)
         else:
-            obj = ModelFactory.create_model(m_type, input_size, enc)
+            obj = ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
             checkpoint = torch.load(path / ext, map_location="cpu")
             if isinstance(checkpoint, dict):
                 # Try different common keys used in your project
@@ -298,43 +298,52 @@ def load_revived_model(h_type, d_type=None, enc=8, scale_bool=False):
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-def plot_decoder_weights_heatmap(model, base_name, d_type, enc):
+def plot_consolidated_heatmaps(base_name, models_dict, scale_bool=False):
     """
-    Extracts weights from the wrapped AE disease component.
+    Generates a single grid of heatmaps: 
+    Rows = Encoding Sizes (8, 16)
+    Cols = Models (Basic, Layered, etc.)
     """
-    try:
-        # 1. Access the disease wrapper (UniversalMixModel.disease)
-        disease_wrapper = model.disease 
-        
-        # 2. Access the inner AE (AEComponent.ae)
-        inner_ae = disease_wrapper.ae
-        
-        # 3. Call the decoder method to get the Sequential block
-        decoder_block = inner_ae.decoder
-        
-        # If it's a method, we might need to check if it's the sequential or needs a call
-        if hasattr(decoder_block, '__getitem__'):
-            # It's likely a Sequential or ModuleList
-            last_layer = decoder_block[-1]
-        else:
-            # It's a direct layer
-            last_layer = decoder_block
+    enc_sizes = cfg.ENCODING_SIZES # e.g., [8, 16]
+    n_rows = len(enc_sizes)
+    n_cols = len(models_dict)
+    
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
+    fig.suptitle(f"Gene Module Discovery: Healthy Base = {base_name.upper()}", fontsize=22, y=1.02)
 
-        weights = last_layer.weight.data.cpu().numpy()
-        
-    except Exception as e:
-        print(f"Extraction failed for {d_type}: {e}")
-        return
+    for r_idx, enc in enumerate(enc_sizes):
+        for c_idx, (model_label, folder_tag) in enumerate(models_dict.items()):
+            ax = axes[r_idx, c_idx]
+            d_arch = folder_tag.split("_D-")[-1]
+            
+            # 1. Load the model using your revived loader
+            model = load_revived_model(base_name.lower().replace("-", "_"), d_arch, enc, scale_bool)
+            
+            if model is None or d_arch == 'pca':
+                ax.text(0.5, 0.5, "PCA/Missing", ha='center')
+                continue
 
-    # Standard Heatmap Plotting logic follows...
-    if weights.shape[0] != 1000: weights = weights.T
-    plt.figure(figsize=(10, 8))
-    sns.heatmap(weights, cmap="RdBu_r", center=0)
-    plt.axhline(500, color='black', linestyle='--')
-    plt.title(f"Disease Gene Signatures: {base_name} | {d_type}")
-    save_dir = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
-    os.makedirs(save_dir, exist_ok=True)
-    plt.savefig(save_dir / f"decoder_heatmap_D-{d_type}_enc{enc}.png")
+            try:
+                # 2. Extract weights from the disease component
+                # UniversalMixModel -> AEComponent -> AE -> decoder
+                weights = model.disease.ae.decoder[-1].weight.data.cpu().numpy()
+                if weights.shape[0] != 1000: 
+                    weights = weights.T
+
+                # 3. Plot Heatmap
+                sns.heatmap(weights, ax=ax, cmap="RdBu_r", center=0, cbar=(c_idx == n_cols-1))
+                ax.axhline(500, color='black', linestyle='--', linewidth=1.5)
+                
+                if r_idx == 0: ax.set_title(f"Disease Model: {model_label}", fontsize=14, fontweight='bold')
+                if c_idx == 0: ax.set_ylabel(f"Enc {enc}\nGenes (0-999)", fontsize=12, fontweight='bold')
+                
+            except Exception as e:
+                ax.text(0.5, 0.5, "Weight Error", ha='center', color='red')
+
+    plt.tight_layout()
+    save_path = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER) / f"Consolidated_Heatmap_{base_name}.png"
+    plt.savefig(save_path, dpi=200, bbox_inches='tight')
+    print(f"✅ Consolidated heatmap saved to: {save_path}")
     plt.close()
 
 def run_comprehensive_analysis():
@@ -353,8 +362,6 @@ def run_comprehensive_analysis():
 
             # 2. Extract Latent/Weight Insights (Interpretability)
             if hasattr(model, 'disease_model'): # If it's a Mix with an AE disease component
-                # Heatmap
-                plot_decoder_weights_heatmap(model, gene_names, f"H-{h_arch}_D-{d_arch}", enc)
                 # Signatures
                 sigs = analyze_decoder_gene_signatures(model, gene_names)
 
@@ -442,36 +449,34 @@ def interpret_disease_mix(phase='disease'):
                                     scale_bool=False, save_path="reconstructed_grid", 
                                     )
     all_results = []
-    for base_label, models in disease_mix_labels.items():
-        h_arch = arch_map[base_label]
+    # for base_label, models in disease_mix_labels.items():
+    #     plot_consolidated_heatmaps(base_label, models)
+    #     h_arch = arch_map[base_label]
         
-        for model_label, folder_tag in models.items():
-            d_arch = folder_tag.split("_D-")[-1]
+    #     for model_label, folder_tag in models.items():
+    #         d_arch = folder_tag.split("_D-")[-1]
             
-            for enc in cfg.ENCODING_SIZES:
-                model = load_revived_model(h_arch, d_arch, enc)
-                if model is None: continue
+    #         for enc in cfg.ENCODING_SIZES:
+    #             model = load_revived_model(h_arch, d_arch, enc)
+    #             if model is None: continue
 
-                # 1. Biological Proof: Heatmap of Gene Connections
-                if d_arch != 'pca':
-                    plot_decoder_weights_heatmap(model, base_label, d_arch, enc)
-                
-                # 2. Statistical Proof: Theta-Invariant Correlation
-                with torch.no_grad():
-                    input_tensor = torch.tensor(input_df.values).float()
-                    output = model(input_tensor)
-                    recon = output[0] if isinstance(output, tuple) else output
-                    recon_df = pd.DataFrame(recon.numpy(), columns=truth_df.columns)
-                # print(theta_values)
-                r_std, r_partial = calculate_theta_invariant_correlation(truth_df, recon_df, theta_values)
-                print(f"Validated {folder_tag} Enc {enc}: Partial R = {r_partial:.4f}")   
-                all_results.append({
-                'h_arch': base_label,
-                'd_arch': folder_tag.split("_D-")[-1],
-                'partial_r': r_partial,
-                'enc': enc
-                })
-    save_performance_comparison(all_results)
+
+    #             # 2. Statistical Proof: Theta-Invariant Correlation
+    #             with torch.no_grad():
+    #                 input_tensor = torch.tensor(input_df.values).float()
+    #                 output = model(input_tensor)
+    #                 recon = output[0] if isinstance(output, tuple) else output
+    #                 recon_df = pd.DataFrame(recon.numpy(), columns=truth_df.columns)
+    #             # print(theta_values)
+    #             r_std, r_partial = calculate_theta_invariant_correlation(truth_df, recon_df, theta_values)
+    #             print(f"Validated {folder_tag} Enc {enc}: Partial R = {r_partial:.4f}")   
+    #             all_results.append({
+    #             'h_arch': base_label,
+    #             'd_arch': folder_tag.split("_D-")[-1],
+    #             'partial_r': r_partial,
+    #             'enc': enc
+    #             })
+    # save_performance_comparison(all_results)
 
 
 
@@ -496,7 +501,7 @@ if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: 'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    # interpret_healthy_model()
+    interpret_healthy_model()
     interpret_disease_mix()
 
     # if cfg.SYNTHETIC_DATA:    

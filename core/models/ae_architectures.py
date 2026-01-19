@@ -19,7 +19,7 @@ class Basic_AE(nn.Module):
 
 
 class Layered_AE(nn.Module):
-    def __init__(self, input_size: int, encoding_size: int = 32, h1: int = 512, h2: int = 128):
+    def __init__(self, input_size: int, encoding_size: int, h1: int, h2: int):
         super(Layered_AE, self).__init__()
         self.in_features = input_size
 

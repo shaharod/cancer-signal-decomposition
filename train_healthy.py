@@ -41,8 +41,8 @@ def train_all_healthy():
                 print(f"Training: {arch} | {tag} | Enc: {enc}")
                 
                 path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER)
-                model = ModelFactory.create_model(arch, train_h.shape[1]-1, enc).to(cfg.DEVICE)
-                
+                model = ModelFactory.create_model(arch, train_h.shape[1]-1, enc, cfg.H1, cfg.H2).to(cfg.DEVICE)
+                print(model)
                 trainer = Trainer(model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)
                 history, best_info = trainer.fit(train_h, test_h, epochs=cfg.EPOCHS_NUM)
                 

@@ -267,6 +267,7 @@ def analyze_disease_mix(phase='disease'):
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
                                     scale_bool=False, save_path="reconstructed_grid", 
                                     )
+        
 
 
 
