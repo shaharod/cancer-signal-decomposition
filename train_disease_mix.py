@@ -51,7 +51,7 @@ def run_cross_architecture_tournament(mode_val):
             for h_arch in cfg.MODEL_TYPES:
                 h_path = cfg.get_path("healthy", tag, h_arch, enc, folder_type=cfg.MODELS_SUBFOLDER) / "model.pt"
                 if h_path.exists():
-                    h_model = ModelFactory.create_model(h_arch, input_dim, enc)
+                    h_model = ModelFactory.create_model(h_arch, input_dim, enc, cfg.H1, cfg.H2)
                     h_model.load_state_dict(torch.load(h_path, weights_only=True))                   
                     healthy_library.append((h_arch, h_model))
             
@@ -108,7 +108,7 @@ def run_cross_architecture_tournament(mode_val):
                     label = f"mix_H-{h_name}_D-{d_arch}"
                     print(f"Testing: {label} | {tag} | Enc: {enc}")
                     
-                    disease_model = ModelFactory.create_model(d_arch, input_dim, enc)
+                    disease_model = ModelFactory.create_model(d_arch, input_dim, enc, cfg.H1, cfg.H2)
                     mix_model = ModelFactory.create_mix_model(h_obj, disease_model)
                     
                     trainer = Trainer(mix_model, scaler=scaler_d, lr=cfg.LR, device=cfg.DEVICE)

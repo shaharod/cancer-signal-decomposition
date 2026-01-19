@@ -6,7 +6,7 @@ from .mix_model import UniversalMixModel
 
 class ModelFactory:
     @staticmethod
-    def create_model(model_type, input_size, encoding_size):
+    def create_model(model_type, input_size, encoding_size, h1, h2):
         """
         Creates a standalone Autoencoder model.
         Used for Phase 1 (Healthy) and the Disease-side of Phase 2.
@@ -15,7 +15,7 @@ class ModelFactory:
             return Basic_AE(input_size, encoding_size)
         elif model_type == "ae_layered":
             # Note: H1 and H2 are usually pulled from config
-            return Layered_AE(input_size, encoding_size)
+            return Layered_AE(input_size, encoding_size, h1, h2)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
