@@ -1,3 +1,4 @@
+import numpy as np
 import torch.nn as nn
 from sklearn.decomposition import PCA
 from .ae_architectures import Basic_AE, Layered_AE
@@ -11,6 +12,12 @@ class ModelFactory:
         Creates a standalone Autoencoder model.
         Used for Phase 1 (Healthy) and the Disease-side of Phase 2.
         """
+        if model_type == "pca":
+            pca_obj = PCA(n_components=encoding_size)
+            pca_obj.mean_ = np.zeros(input_size)
+            pca_obj.components_ = np.zeros((encoding_size, input_size))
+            pca_obj.n_components_ = encoding_size
+            return PCAComponent(pca_obj)
         if model_type == "ae_basic":
             return Basic_AE(input_size, encoding_size)
         elif model_type == "ae_layered":

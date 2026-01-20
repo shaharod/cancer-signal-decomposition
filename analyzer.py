@@ -1,4 +1,6 @@
 import os
+
+import joblib
 import config as cfg
 import utils.analysis_utils as au
 
@@ -70,41 +72,74 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
         
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
         fig.suptitle(f"Tournament Results: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
-                     fontsize=20, fontweight='bold', y=0.98)
+                      # pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
+    # pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
+    # pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
+    # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
+    #             # Sarina plot additions ##
+    # pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
+    
+    # ## with pca train/test vals too
+    # pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=None)    # <--- No zoom
+
+    # pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, 'Healthy Model Performance', 'mse_line_comparison.png', save_path)
+    # pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
+    #                                                       save_path="final_architecture_vs_scaling_bars.png",
+    #                                                       folder_path=save_path)
+      fontsize=20, fontweight='bold', y=0.98)
                      
         for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
                 ax = axes[row_idx, col_idx]
-                
+                is_pca = None
+                is_mix=True if "mix" in folder_tag else False
                 try:
                     # --- UNIFIED LOADING LOGIC ---
-                    if "mix" in folder_tag:
+                    if is_mix:
                         # Disease Mix Logic
                         parts = folder_tag.split('_H-')
                         h_and_d = parts[1].split('_D-')
                         h_type, d_type = h_and_d[0], h_and_d[1]
+                        if d_type == 'pca': is_pca = d_type
+                        # def prepare_obj(m_type):
+                        #     if m_type.lower() == 'pca':
+                        #         obj = PCA(n_components=enc)
+                        #         obj.mean_, obj.n_components_ = np.zeros(input_size), enc
+                        #         obj.components_ = np.zeros((enc, input_size))
+                        #         return obj
+                        #     return ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
 
-                        def prepare_obj(m_type):
-                            if m_type.lower() == 'pca':
-                                obj = PCA(n_components=enc)
-                                obj.mean_, obj.n_components_ = np.zeros(input_size), enc
-                                obj.components_ = np.zeros((enc, input_size))
-                                return obj
-                            return ModelFactory.create_model(m_type, input_size, enc)
-
-                        model = ModelFactory.create_mix_model(prepare_obj(h_type), prepare_obj(d_type))
+                        # model = ModelFactory.create_mix_model(prepare_obj(h_type), prepare_obj(d_type))
+                        h_model = ModelFactory.create_model(h_type, input_size, enc, cfg.H1, cfg.H2)
+                        d_model = ModelFactory.create_model(d_type, input_size, enc, cfg.H1, cfg.H2)
+                        model = ModelFactory.create_mix_model(h_model, d_model)
                     else:
+                        if folder_tag.lower() == "pca":
+                            is_pca = "pca"
                         # Healthy / Standalone Logic
-                        model = ModelFactory.create_model(folder_tag, input_size, enc)
+                        model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
 
                     # --- LOAD WEIGHTS & INFER ---
-                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / "model.pt"
+                    ext = "model.joblib" if is_pca else "model.pt"
+                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / ext
                     if not model_path.exists():
                         ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
+                    if is_pca:
+                        pca_sk = joblib.load(model_path)
+                        
+                        if is_mix:
+                            model.disease.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+                            model.disease.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+                        else:    
+                            # Manually inject the weights into the PyTorch buffers
+                            model.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+                            model.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+                        
+                    else:
 
-                    checkpoint = torch.load(model_path, map_location="cpu")
-                    state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
-                    model.load_state_dict(state_dict)
+                        checkpoint = torch.load(model_path, map_location="cpu")
+                        state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+                        model.load_state_dict(state_dict)
                     model.eval()
 
                     with torch.no_grad():
@@ -293,11 +328,7 @@ def analyze_healthy_model(phase='healthy'):
 
 
     # plotting
-    pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
-    pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
-    pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
-    pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
-                # Sarina plot additions ##
+                ## Sarina plot additions ##
     pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
     
     ## with pca train/test vals too
@@ -307,7 +338,6 @@ def analyze_healthy_model(phase='healthy'):
     pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
                                                           save_path="final_architecture_vs_scaling_bars.png",
                                                           folder_path=save_path)
-   
     analyze_reconstruction_grid(model_labels, phase='healthy', 
                                 scale_bool=False, 
                                 save_path="reconstructed_grid")
