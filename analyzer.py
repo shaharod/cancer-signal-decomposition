@@ -293,11 +293,11 @@ def analyze_healthy_model(phase='healthy'):
 
 
     # plotting
-    # pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
-    # pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
-    # pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
-    # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
-                ## Sarina plot additions ##
+    pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
+    pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
+    pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
+    pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
+                # Sarina plot additions ##
     pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
     
     ## with pca train/test vals too
