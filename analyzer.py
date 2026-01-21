@@ -3,10 +3,12 @@ import os
 import joblib
 import config as cfg
 import utils.analysis_utils as au
+from core.models.model_factory import ModelFactory
 
 import utils.plots_utils as pu
 import torch
 import numpy as np
+import matplotlib.pyplot as plt
 
 import pandas as pd
 
@@ -44,10 +46,6 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     If phase='disease', it handles 'mix' parsing. 
     If phase='healthy', it handles standalone parsing.
     """
-    from core.models.model_factory import ModelFactory
-    from sklearn.decomposition import PCA
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # 1. Load Data & Tensors
     input_df, truth_df = load_reconstruction_data(phase)
@@ -72,21 +70,7 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
         
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
         fig.suptitle(f"Tournament Results: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
-                      # pu.plot_test_mse_bars(data_s, data_u, 'mse_bar_plot', save_path)
-    # pu.plot_mse_vs_encoding(data_s, data_u, 'mse_vs_enc_size', save_path)
-    # pu.plot_learning_curves(data_s, data_u, 'learning_curve_plot', save_path, zoom_params=zoom)
-    # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', save_path)
-    #             # Sarina plot additions ##
-    # pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
-    
-    # ## with pca train/test vals too
-    # pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=None)    # <--- No zoom
-
-    # pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, 'Healthy Model Performance', 'mse_line_comparison.png', save_path)
-    # pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
-    #                                                       save_path="final_architecture_vs_scaling_bars.png",
-    #                                                       folder_path=save_path)
-      fontsize=20, fontweight='bold', y=0.98)
+        fontsize=20, fontweight='bold', y=0.98)
                      
         for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
@@ -101,15 +85,7 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
                         h_and_d = parts[1].split('_D-')
                         h_type, d_type = h_and_d[0], h_and_d[1]
                         if d_type == 'pca': is_pca = d_type
-                        # def prepare_obj(m_type):
-                        #     if m_type.lower() == 'pca':
-                        #         obj = PCA(n_components=enc)
-                        #         obj.mean_, obj.n_components_ = np.zeros(input_size), enc
-                        #         obj.components_ = np.zeros((enc, input_size))
-                        #         return obj
-                        #     return ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
-
-                        # model = ModelFactory.create_mix_model(prepare_obj(h_type), prepare_obj(d_type))
+            
                         h_model = ModelFactory.create_model(h_type, input_size, enc, cfg.H1, cfg.H2)
                         d_model = ModelFactory.create_model(d_type, input_size, enc, cfg.H1, cfg.H2)
                         model = ModelFactory.create_mix_model(h_model, d_model)
@@ -277,12 +253,7 @@ def analyze_disease_mix(phase='disease'):
 
         # generating plots once per baseline
         print(f"Generating Group Plots for: {baseline}")
-        # pu.plot_test_mse_bars(data_s, data_u, f'mse_bar_plot_H-{baseline}', group_save_path)
-        # pu.plot_mse_vs_encoding(data_s, data_u, f'mse_vs_enc_size_H-{baseline}', group_save_path)
-        # pu.plot_learning_curves(data_s, data_u, f'learning_curve_H-{baseline}', group_save_path, zoom_params=zoom)
-        # pu.plot_training_vs_pca(data_s, data_u, 'training_vs_pca', group_save_path)
 
-                    ## Sarina plot additions ##
         pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=False, zoom_params=None)    # <--- No zoom
         
         ## with pca train/test vals too
@@ -295,8 +266,7 @@ def analyze_disease_mix(phase='disease'):
             encoding_sizes=cfg.ENCODING_SIZES,
             title=f"Disease Tournament: Impact of AE vs PCA (Healthy Base = {baseline})",
             save_path=f"{baseline.lower()}_base_tournament_bars.png",
-            folder_path=group_save_path,
-#            labels=["Disease Basic AE", "Disease Layered AE", "Disease PCA"]
+            folder_path=group_save_path
         )
         ##unscaled data reconstructions
         analyze_reconstruction_grid(disease_mix_labels, phase='disease', 

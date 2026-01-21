@@ -14,16 +14,19 @@ import pandas as pd
 SCALED = True
 UNSCALED = False
 
-def load_reconstruction_data():
+def load_reconstruction_data(phase):
     """
     Loads the validation data (Mixed Input and Clean Ground Truth).
     Matches your requested structure using config paths.
     """
-    # 1. Define Paths
-    mix_file = cfg.DISEASE_GENES_PATH
-    # Assuming 'pure_disease_truth.csv' exists in your data folder
-    truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' 
-
+    if phase == "healthy":
+        mix_file = cfg.HEALTHY_GENES_PATH  # Input is pure healthy data
+        truth_file = cfg.HEALTHY_GENES_PATH
+    else:
+        mix_file = cfg.DISEASE_GENES_PATH  # Input is mixed data
+        truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
+    print(f"truth_file: {truth_file}")
+    print(f"mix file: {mix_file}")
     # 2. Validation
     if not mix_file.exists() or not truth_file.exists():
         print(f"⚠️ Warning: Reconstruction data not found:\n {mix_file}\n {truth_file}")
@@ -35,6 +38,7 @@ def load_reconstruction_data():
     df_pure  = pd.read_csv(truth_file, index_col=0).T
     
     return df_mixed, df_pure
+
 
 
 def calculate_theta_invariant_correlation(truth_df, recon_df, theta_values):
@@ -130,13 +134,9 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
     If phase='disease', it handles 'mix' parsing. 
     If phase='healthy', it handles standalone parsing.
     """
-    from core.models.model_factory import ModelFactory
-    from sklearn.decomposition import PCA
-    import numpy as np
-    import matplotlib.pyplot as plt
 
     # 1. Load Data & Tensors
-    input_df, truth_df = load_reconstruction_data()
+    input_df, truth_df = load_reconstruction_data(phase)
     if input_df is None: return
     
     tag = "scaled" if scale_bool else "unscaled"
@@ -156,55 +156,54 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
         n_rows = len(cfg.ENCODING_SIZES)
         n_cols = len(models)
         
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
-        fig.suptitle(f"Tournament Results: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
-                     fontsize=20, fontweight='bold', y=0.98)
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6 * n_rows), squeeze=False)
+        fig.suptitle(f"Expression Distributions: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
+        fontsize=20, fontweight='bold', y=0.98)
                      
         for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
                 ax = axes[row_idx, col_idx]
-                
+                is_pca = None
+                is_mix=True if "mix" in folder_tag else False
                 try:
                     # --- UNIFIED LOADING LOGIC ---
-                    if "mix" in folder_tag:
+                    if is_mix:
                         # Disease Mix Logic
                         parts = folder_tag.split('_H-')
                         h_and_d = parts[1].split('_D-')
                         h_type, d_type = h_and_d[0], h_and_d[1]
-
-                        def prepare_obj(m_type):
-                            if m_type.lower() == 'pca':
-                                obj = PCA(n_components=enc)
-                                obj.mean_, obj.n_components_ = np.zeros(input_size), enc
-                                obj.components_ = np.zeros((enc, input_size))
-                                return obj
-                            return ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
-
-                        model = ModelFactory.create_mix_model(prepare_obj(h_type), prepare_obj(d_type))
+                        if d_type == 'pca': is_pca = d_type
+            
+                        h_model = ModelFactory.create_model(h_type, input_size, enc, cfg.H1, cfg.H2)
+                        d_model = ModelFactory.create_model(d_type, input_size, enc, cfg.H1, cfg.H2)
+                        model = ModelFactory.create_mix_model(h_model, d_model)
                     else:
+                        if folder_tag.lower() == "pca":
+                            is_pca = "pca"
                         # Healthy / Standalone Logic
                         model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
 
                     # --- LOAD WEIGHTS & INFER ---
-                    is_pca = "pca" in folder_tag.lower()
                     ext = "model.joblib" if is_pca else "model.pt"
                     model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / ext
-
                     if not model_path.exists():
-                        ax.text(0.5, 0.5, f"Missing:\n{folder_tag}", ha='center')
-                        continue
-
+                        ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
                     if is_pca:
-                        # PCA doesn't need state_dict loading, the Factory handles the object
-                        # But we need to ensure the d_type is loaded if it's a standalone PCA
-                        checkpoint = joblib.load(model_path)
-                        # If the factory returns a fresh object, you might need to assign 
-                        # the loaded components to it here.
+                        pca_sk = joblib.load(model_path)
+                        
+                        if is_mix:
+                            model.disease.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+                            model.disease.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+                        else:    
+                            # Manually inject the weights into the PyTorch buffers
+                            model.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+                            model.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+                        
                     else:
+
                         checkpoint = torch.load(model_path, map_location="cpu")
                         state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
                         model.load_state_dict(state_dict)
-
                     model.eval()
 
                     with torch.no_grad():
@@ -213,28 +212,170 @@ def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
                     
                     # log_recon = np.log1p(reconstructed.numpy()).flatten()
                     recon_raw = reconstructed.numpy().flatten()
-                    truth_raw = truth_df.values.flatten()
-                    # corr = np.corrcoef(log_truth, log_recon)[0, 1]
+                    truth_raw = input_df.values.flatten()
                     corr = np.corrcoef(truth_raw, recon_raw)[0, 1]
                     # --- PLOTTING ---
-                    # ax.hexbin(log_truth, log_recon, gridsize=70, cmap='YlGnBu', mincnt=1, bins='log')
-                    # ax.plot([log_truth.min(), log_truth.max()], [log_truth.min(), log_truth.max()], 'r--', lw=1)
-                    ax.hexbin(truth_raw, recon_raw, gridsize=70, cmap='YlGnBu', mincnt=1)
+                    # We create a list of data arrays to plot side-by-side
+                    data_to_plot = [truth_raw, recon_raw]
+                    
+                    # Using patch_artist to color the boxes for distinction
+                    bp = ax.boxplot(data_to_plot, tick_labels=['Truth', 'Pred'], patch_artist=True, 
+                                    showfliers=False, widths=0.6)
+                    plot_df = pd.DataFrame({
+                        'Value': np.concatenate([truth_raw, recon_raw]),
+                        'Type': ['Truth'] * len(truth_raw) + ['Pred'] * len(recon_raw)
+                    })
+                    sns.violinplot(data=plot_df, x='Type', y='Value', ax=ax, hue='Type',
+                    palette=['#bdc3c7', '#1abc9c'], inner=None, alpha=0.3, legend=False)
 
-                    # Identity line based on raw min/max
-                    ax.plot([truth_raw.min(), truth_raw.max()], [truth_raw.min(), truth_raw.max()], 'r--', lw=1)
-                    if row_idx == 0: ax.set_title(f"{model_label}", fontsize=12, fontweight='bold')
-                    if col_idx == 0: ax.set_ylabel(f"Enc: {enc}", fontsize=10, fontweight='bold')
-                    ax.text(0.05, 0.95, f"R: {corr:.3f}", transform=ax.transAxes, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
+                    # 3. Overlay the Stripplot (Raw point variability)
+                    sns.stripplot(data=plot_df, x='Type', y='Value', ax=ax, hue='Type',
+                                palette=['#7a96a4', '#1abc9c'], size=2, alpha=0.15, jitter=True, legend=False)
 
+                    # 4. Final Formatting
+                    # Fix the Y-axis so we see the 0.5 mixing level (50) clearly
+                    ax.set_ylim(-5, 110) 
+                    ax.axhline(50, color='gray', linestyle='--', alpha=0.3, lw=1, label='Mix Baseline')
+
+                    # Color the boxes specifically
+                    for patch, color in zip(bp['boxes'], ['#7f8c8d', '#057861']):
+                        patch.set_facecolor(color)
+                        patch.set_alpha(0.6)
+                    
+                    # # Colors: Ground Truth (Gray), Prediction (Teal)
+                    # colors = ['#bdc3c7', '#1abc9c']
+                    # for patch, color in zip(bp['boxes'], colors):
+                    #     patch.set_facecolor(color)
+                    #     # We create a temporary DataFrame to make Seaborn happy
+                    
+
+                    # sns.stripplot(data=plot_df, x='Type', y='Value', ax=ax, hue='Type',
+                    #             palette=['yellow', 'red'], # Darker versions of your box colors
+                    #             size=2, alpha=0.3, jitter=True, legend=True) #legend=False
+
+                    # # 3. Clean up formatting
+                    # for patch, color in zip(bp['boxes'], ['#bdc3c7', '#1abc9c']):
+                    #     patch.set_facecolor(color)
+                    #     patch.set_alpha(0.5) # Lower alpha so points show through
+                    # Formatting
+                    if row_idx == 0: ax.set_title(f"{model_label}", fontsize=14, fontweight='bold')
+                    if col_idx == 0: ax.set_ylabel(f"Enc: {enc}\nExpression Level", fontsize=12, fontweight='bold')
+                    ax.grid(axis='y', linestyle='--', alpha=0.7)
+                    ax.text(0.5, 0.95, f"R: {corr:.3f}", transform=ax.transAxes, 
+                            ha='center', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                    # ax.set_ylim(0, 100)
                 except Exception as e:
-                    ax.text(0.5, 0.5, f"Error Loading Model", ha='center', color='red')
+                    ax.text(0.5, 0.5, f"Error Loading Model, {str(e)}", ha='center', color='red')
 
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         folder = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
         os.makedirs(folder, exist_ok=True)
         full_path = os.path.join(folder, f"{save_path}_{tag}")
         plt.savefig(full_path, dpi=150)
+        plt.close()
+
+
+def analyze_reconstruction_combined(labels_dict, phase, scale_bool, save_path):
+    # 1. Load Data
+    input_df, truth_df = load_reconstruction_data(phase)
+    if input_df is None: return
+    
+    input_raw = input_df.values.flatten()  # The reference (contains the 50s)
+    tag = "scaled" if scale_bool else "unscaled"
+    input_size = input_df.shape[1]
+    input_tensor = torch.tensor(input_df.values).float().to("cpu")
+
+    # 2. Handle Phase Logic
+    iterator = labels_dict.items() if phase == 'disease' else [("Standalone", labels_dict)]
+
+    for base_name, models in iterator:
+        n_rows = len(cfg.ENCODING_SIZES)
+        n_cols = len(models) + 1 # +1 for the Input reference
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 6 * n_rows), squeeze=False)
+        fig.suptitle(f"Tournament Distribution Comparison: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
+                     fontsize=20, fontweight='bold', y=0.98)
+                             
+        for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
+            # --- COLUMN 0: THE INPUT REFERENCE (Plotted once per row) ---
+            ax_input = axes[row_idx, 0]
+            sns.violinplot(y=input_raw, ax=ax_input, color='#ecf0f1', inner='quartile', alpha=0.4)
+            sns.stripplot(y=input_raw, ax=ax_input, color="#7a96a4", size=2, alpha=0.1, jitter=True)
+            
+            ax_input.set_ylim(-5, 115)
+            ax_input.axhline(50, color='red', linestyle='--', alpha=0.3)
+            ax_input.set_ylabel(f"Enc: {enc}\nExpression", fontsize=12, fontweight='bold')
+            if row_idx == 0: 
+                ax_input.set_title("Original\n(Mixed Input)", fontweight='bold', color='darkblue')
+
+            # --- COLUMNS 1 TO N: THE MODELS ---
+            for col_idx, (model_label, folder_tag) in enumerate(models.items()):
+                ax = axes[row_idx, col_idx + 1] # Offset by 1
+                is_pca = None
+                is_mix = True if "mix" in folder_tag else False
+                
+                try:
+                    # --- MODEL LOADING ---
+                    if is_mix:
+                        parts = folder_tag.split('_H-')
+                        h_and_d = parts[1].split('_D-')
+                        h_type, d_type = h_and_d[0], h_and_d[1]
+                        if d_type == 'pca': is_pca = d_type
+                        
+                        h_model = ModelFactory.create_model(h_type, input_size, enc, cfg.H1, cfg.H2)
+                        d_model = ModelFactory.create_model(d_type, input_size, enc, cfg.H1, cfg.H2)
+                        model = ModelFactory.create_mix_model(h_model, d_model)
+                    else:
+                        if "pca" in folder_tag.lower(): is_pca = "pca"
+                        model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
+
+                    # --- WEIGHT LOADING ---
+                    ext = "model.joblib" if is_pca else "model.pt"
+                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / ext
+                    
+                    if not model_path.exists():
+                        ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
+
+                    if is_pca:
+                        import joblib
+                        pca_sk = joblib.load(model_path)
+                        target = model.disease if is_mix else model
+                        target.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+                        target.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+                    else:
+                        checkpoint = torch.load(model_path, map_location="cpu")
+                        state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+                        model.load_state_dict(state_dict)
+
+                    # --- INFERENCE ---
+                    model.eval()
+                    with torch.no_grad():
+                        output = model(input_tensor)
+                        reconstructed = output[0] if isinstance(output, (tuple, list)) else output
+                    
+                    recon_raw = reconstructed.numpy().flatten()
+                    corr = np.corrcoef(input_raw, recon_raw)[0, 1]
+
+                    # --- PLOTTING ---
+                    sns.violinplot(y=recon_raw, ax=ax, color='#1abc9c', inner='quartile', alpha=0.4)
+                    sns.stripplot(y=recon_raw, ax=ax, color="#057861", size=2, alpha=0.1, jitter=True)
+                    
+                    # ax.set_ylim(-5, 115)
+                    ax.axhline(50, color='gray', linestyle='--', alpha=0.3)
+                    
+                    if row_idx == 0: 
+                        ax.set_title(f"{model_label}", fontsize=14, fontweight='bold')
+                    
+                    ax.text(0.5, 0.95, f"R: {corr:.3f}", transform=ax.transAxes, ha='center', 
+                            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+
+                except Exception as e:
+                    ax.text(0.5, 0.5, f"Error:\n{str(e)[:30]}...", ha='center', color='red')
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        folder = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
+        os.makedirs(folder, exist_ok=True)
+        plt.savefig(folder / f"{save_path}_{tag}.png", dpi=150)
         plt.close()
 
 import joblib
@@ -413,40 +554,38 @@ def interpret_disease_mix(phase='disease'):
 
     gene_names = [f"Gene_{i}" for i in range(1000)]
     theta_df = pd.read_csv(cfg.THETA_PATH)
-    theta_values = pd.to_numeric(theta_df.iloc[:, -1], errors='coerce').dropna().values
-    input_df, truth_df = load_reconstruction_data()
+    # theta_values = pd.to_numeric(theta_df.iloc[:, -1], errors='coerce').dropna().values
+    # input_df, truth_df = load_reconstruction_data(phase)
     # all possible combinations of healthy baselines with disease
     disease_mix_labels = {
         'PCA':
         {
-            "basic": "mix_H-pca_D-ae_basic",
-            "layered": "mix_H-pca_D-ae_layered",
-            "pca-based": "mix_H-pca_D-pca"
+            "Basic-AE": "mix_H-pca_D-ae_basic",
+            "Layered-AE": "mix_H-pca_D-ae_layered",
+            "PCA": "mix_H-pca_D-pca"
         },
         'AE-Basic':
         {
-            "basic": "mix_H-ae_basic_D-ae_basic",
-            "layered": "mix_H-ae_basic_D-ae_layered",
-            "pca-based": "mix_H-ae_basic_D-pca"
+            "Basic-AE": "mix_H-ae_basic_D-ae_basic",
+            "Layered-AE": "mix_H-ae_basic_D-ae_layered",
+            "PCA": "mix_H-ae_basic_D-pca"
         },
         'AE-Layered':
         {
-            "basic": "mix_H-ae_layered_D-ae_basic",
-            "layered": "mix_H-ae_layered_D-ae_layered",
-            "pca-based": "mix_H-ae_layered_D-pca"
+            "Basic-AE": "mix_H-ae_layered_D-ae_basic",
+            "Layered-AE": "mix_H-ae_layered_D-ae_layered",
+            "PCA": "mix_H-ae_layered_D-pca"
         }
-    }
-    arch_map = {
-        'PCA': 'pca', 
-        'AE-Basic': 'ae_basic', 
-        'AE-Layered': 'ae_layered'
     }
 
     # for baseline, labels in disease_mix_labels.items():
 
         ##unscaled data reconstructions
     analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
-                                    scale_bool=False, save_path="reconstructed_grid", 
+                                    scale_bool=False, save_path="reconstructed_grid_boxplot", 
+                                    )
+    analyze_reconstruction_combined(disease_mix_labels, phase='disease', 
+                                    scale_bool=False, save_path="new_reconstructed_grid", 
                                     )
     all_results = []
     # for base_label, models in disease_mix_labels.items():
@@ -492,7 +631,10 @@ def interpret_healthy_model(phase='healthy'):
  
     analyze_reconstruction_grid(model_labels, phase='healthy', 
                                 scale_bool=False, 
-                                save_path="reconstructed_grid")
+                                save_path="reconstructed_grid_boxplot")
+    analyze_reconstruction_combined(model_labels, phase='healthy', 
+                                scale_bool=False, 
+                                save_path="new_reconstructed_grid_boxplot")
 
 
 
@@ -501,10 +643,11 @@ if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: 'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    interpret_healthy_model()
+    # interpret_healthy_model()
     interpret_disease_mix()
 
     # if cfg.SYNTHETIC_DATA:    
     #     analyze_reconstruction()
+
 
 
