@@ -130,6 +130,24 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
     
+def get_ready_tensors_df(train_df, test_df, use_scaling=None):
+    if not use_scaling:
+        # We must use .values and specify dtype to create a valid PyTorch Tensor
+        train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        test_t = torch.tensor(test_df.values, dtype=torch.float32)
+        return train_t, test_t, None
+    
+    # Separate genes from theta
+    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
+    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    
+    # Scale only the genes
+    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
+    
+    # Combine back to [Genes | Theta]
+    train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
+    return train_tensor, test_tensor, scaler
 # def update_sample_metadata(log_path, gene_path, train_df, test_df, mode):
     """
     Saves counts into a single JSON file.

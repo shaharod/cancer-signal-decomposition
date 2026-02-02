@@ -40,114 +40,6 @@ def load_reconstruction_data(phase):
     return df_mixed, df_pure
 
 
-def analyze_reconstruction_grid(labels_dict, phase, scale_bool, save_path):
-    """
-    One function to rule them all. 
-    If phase='disease', it handles 'mix' parsing. 
-    If phase='healthy', it handles standalone parsing.
-    """
-
-    # 1. Load Data & Tensors
-    input_df, truth_df = load_reconstruction_data(phase)
-    if input_df is None: return
-    
-    tag = "scaled" if scale_bool else "unscaled"
-    input_size = input_df.shape[1]
-    input_tensor = torch.tensor(input_df.values).float().to("cpu")
-    # log_truth = np.log1p(truth_df.values).flatten()
-
-    # 2. Determine if we are looping through Tournament Bases (Disease) or just Labels (Healthy)
-    # This detects if labels_dict is {Base: {Models}} or just {Models}
-    if phase == 'disease':
-        iterator = labels_dict.items()
-    else:
-        # Wrap healthy labels in a dummy base so the loop structure is the same
-        iterator = [("Standalone", labels_dict)]
-
-    for base_name, models in iterator:
-        n_rows = len(cfg.ENCODING_SIZES)
-        n_cols = len(models)
-        
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows), squeeze=False)
-        fig.suptitle(f"Tournament Results: Healthy Base = {base_name.upper()}\nPhase: {phase.capitalize()} | Data: {tag.capitalize()}", 
-        fontsize=20, fontweight='bold', y=0.98)
-                     
-        for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
-            for col_idx, (model_label, folder_tag) in enumerate(models.items()):
-                ax = axes[row_idx, col_idx]
-                is_pca = None
-                is_mix=True if "mix" in folder_tag else False
-                try:
-                    # --- UNIFIED LOADING LOGIC ---
-                    if is_mix:
-                        # Disease Mix Logic
-                        parts = folder_tag.split('_H-')
-                        h_and_d = parts[1].split('_D-')
-                        h_type, d_type = h_and_d[0], h_and_d[1]
-                        if d_type == 'pca': is_pca = d_type
-            
-                        h_model = ModelFactory.create_model(h_type, input_size, enc, cfg.H1, cfg.H2)
-                        d_model = ModelFactory.create_model(d_type, input_size, enc, cfg.H1, cfg.H2)
-                        model = ModelFactory.create_mix_model(h_model, d_model)
-                    else:
-                        if folder_tag.lower() == "pca":
-                            is_pca = "pca"
-                        # Healthy / Standalone Logic
-                        model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
-
-                    # --- LOAD WEIGHTS & INFER ---
-                    ext = "model.joblib" if is_pca else "model.pt"
-                    model_path = cfg.get_path(phase, tag, folder_tag, enc, cfg.MODELS_SUBFOLDER) / ext
-                    if not model_path.exists():
-                        ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
-                    if is_pca:
-                        pca_sk = joblib.load(model_path)
-                        
-                        if is_mix:
-                            model.disease.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
-                            model.disease.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
-                        else:    
-                            # Manually inject the weights into the PyTorch buffers
-                            model.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
-                            model.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
-                        
-                    else:
-
-                        checkpoint = torch.load(model_path, map_location="cpu")
-                        state_dict = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
-                        model.load_state_dict(state_dict)
-                    model.eval()
-
-                    with torch.no_grad():
-                        output = model(input_tensor)
-                        reconstructed = output[0] if isinstance(output, (tuple, list)) else output
-                    
-                    # log_recon = np.log1p(reconstructed.numpy()).flatten()
-                    recon_raw = reconstructed.numpy().flatten()
-                    truth_raw = truth_df.values.flatten()
-                    # corr = np.corrcoef(log_truth, log_recon)[0, 1]
-                    corr = np.corrcoef(truth_raw, recon_raw)[0, 1]
-                    # --- PLOTTING ---
-                    # ax.hexbin(log_truth, log_recon, gridsize=70, cmap='YlGnBu', mincnt=1, bins='log')
-                    # ax.plot([log_truth.min(), log_truth.max()], [log_truth.min(), log_truth.max()], 'r--', lw=1)
-                    ax.hexbin(truth_raw, recon_raw, gridsize=70, cmap='YlGnBu', mincnt=1)
-
-                    # Identity line based on raw min/max
-                    ax.plot([truth_raw.min(), truth_raw.max()], [truth_raw.min(), truth_raw.max()], 'r--', lw=1)
-                    if row_idx == 0: ax.set_title(f"{model_label}", fontsize=12, fontweight='bold')
-                    if col_idx == 0: ax.set_ylabel(f"Enc: {enc}", fontsize=10, fontweight='bold')
-                    ax.text(0.05, 0.95, f"R: {corr:.3f}", transform=ax.transAxes, verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.7))
-
-                except Exception as e:
-                    ax.text(0.5, 0.5, f"Error Loading Model", ha='center', color='red')
-
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        folder = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{base_name}"
-        os.makedirs(folder, exist_ok=True)
-        full_path = os.path.join(folder, f"{save_path}_{tag}")
-        plt.savefig(full_path, dpi=150)
-        plt.close()
-
 def collect_phase_data(phase, model_labels):
     """
     getting trained models history and data from models
@@ -197,8 +89,6 @@ def print_data(data_s, data_u):
                 print(f"  [Enc {enc:3}]: Train Pts: {t_len:4} | Eval Pts: {e_len:4} | Test MSE: {mse_val:.6f}")
 
 
-
-
 def analyze_disease_mix(phase='disease'):
 
     # all possible combinations of healthy baselines with disease
@@ -208,19 +98,20 @@ def analyze_disease_mix(phase='disease'):
             "basic": "mix_H-pca_D-ae_basic",
             "layered": "mix_H-pca_D-ae_layered",
             "pca-based": "mix_H-pca_D-pca"
-        },
-        'AE-Basic':
-        {
-            "basic": "mix_H-ae_basic_D-ae_basic",
-            "layered": "mix_H-ae_basic_D-ae_layered",
-            "pca-based": "mix_H-ae_basic_D-pca"
-        },
-        'AE-Layered':
-        {
-            "basic": "mix_H-ae_layered_D-ae_basic",
-            "layered": "mix_H-ae_layered_D-ae_layered",
-            "pca-based": "mix_H-ae_layered_D-pca"
         }
+        # ,
+        # 'AE-Basic':
+        # {
+        #     "basic": "mix_H-ae_basic_D-ae_basic",
+        #     "layered": "mix_H-ae_basic_D-ae_layered",
+        #     "pca-based": "mix_H-ae_basic_D-pca"
+        # },
+        # 'AE-Layered':
+        # {
+        #     "basic": "mix_H-ae_layered_D-ae_basic",
+        #     "layered": "mix_H-ae_layered_D-ae_layered",
+        #     "pca-based": "mix_H-ae_layered_D-pca"
+        # }
     }
 
 
@@ -268,12 +159,7 @@ def analyze_disease_mix(phase='disease'):
             save_path=f"{baseline.lower()}_base_tournament_bars.png",
             folder_path=group_save_path
         )
-        ##unscaled data reconstructions
-        analyze_reconstruction_grid(disease_mix_labels, phase='disease', 
-                                    scale_bool=False, save_path="reconstructed_grid", 
-                                    )
-        
-
+     
 
 
 
@@ -308,19 +194,27 @@ def analyze_healthy_model(phase='healthy'):
     pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
                                                           save_path="final_architecture_vs_scaling_bars.png",
                                                           folder_path=save_path)
-    analyze_reconstruction_grid(model_labels, phase='healthy', 
-                                scale_bool=False, 
-                                save_path="reconstructed_grid")
-
-
-
 
 if __name__ == '__main__':
-
+    for mode in ["true", "fixed"]:
+        print(f"\n" + "="*40)
+        print(f">>> STARTING SYNTHETIC EXPERIMENT: {mode.upper()}")
+        print("="*40)
+        
+        # Set the flags so get_path and get_ready_tensors behave correctly
+        if mode == "true":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = False
+        # elif mode == "random":
+        #     cfg.RANDOM_THETA_EXP = True
+        #     cfg.FIXED_THETA_EXP = False
+        elif mode == "fixed":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = True
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-    analyze_healthy_model()
-    analyze_disease_mix()
+        analyze_healthy_model()
+        analyze_disease_mix()
 
     # if cfg.SYNTHETIC_DATA:    
     #     analyze_reconstruction()

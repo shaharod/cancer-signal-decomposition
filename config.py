@@ -17,7 +17,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 
 # ---- Global Decisions ----
 RANDOM_THETA_EXP = False
-FIXED_THETA_EXP = False
+FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
@@ -35,6 +35,8 @@ else:
     DISEASE_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_crc.csv"
     THETA_PATH         = DATA_SUB / "theta_CRC_passedQC.csv"
 
+SYN_MIX_DISEASE_PART = DATA_SUB / "pure_disease_truth.csv"
+SYN_MIX_HEALTHY_PART = DATA_SUB / "healthy_mix_basis.csv"
 SIG_PATH = DATA_SUB / "SIGpassClinicalQC_H3K4me3.csv"
 
 # ---- Hyperparameters ----
@@ -114,4 +116,60 @@ def get_split_path(phase, scale_tag):
 
     os.makedirs(split_dir, exist_ok=True)
     return split_dir / f"split_{scale_tag}.json"
+
+def get_path_new(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODELS_SUBFOLDER, all_or_no=None):
+    DISEASE_DIR = BASE_EXP_DIR / 'disease_mix_all'
+    # getting phase root
+    if not all_or_no:
+        return get_path(phase, scale_tag, model_type, enc, folder_type)
+    if phase == "disease":
+
+        if FIXED_THETA_EXP:
+            root = DISEASE_DIR / 'disease_mix_fixed_0.5'
+        elif RANDOM_THETA_EXP:
+            root = DISEASE_DIR / 'disease_mix_random_theta'
+        else:
+            theta_type = 'uniform' if SYNTHETIC_DATA else 'true'
+            root = DISEASE_DIR / f'disease_mix_{theta_type}_theta'
+
+    # usage category (Models vs Plots)
+    root = root / folder_type
+    
+    # creating sub-folder path
+    if scale_tag is None or model_type is None or enc is None:
+        path = root
+    else:
+        path = root / scale_tag / model_type / f"enc_{enc}"
+
+    os.makedirs(path, exist_ok=True)
+    return path
+
+def get_split_path_new(phase, scale_tag, all_or_disease_only, theta_type):
+    """
+    Different than regular one, in the case of disease where we train with
+    both healthy and disease samples or only disease. choose between disease_mix 
+    and disease_mix_all
+    """
+    DISEASE_DIR = BASE_EXP_DIR / 'disease_mix_all'
+
+    if all_or_disease_only:
+        if phase != "disease":
+            raise ValueError("Why did i not get phase disease")
+        if theta_type == "fixed":
+            root = DISEASE_DIR / 'disease_mix_fixed_0.5'
+        elif theta_type == "random":
+            root = DISEASE_DIR / 'disease_mix_random_theta'
+        else:
+            theta_type = 'uniform' if SYNTHETIC_DATA else 'true'
+            root = DISEASE_DIR / f'disease_mix_{theta_type}_theta'
+
+        root = root / MODELS_SUBFOLDER
+        split_dir = root / "splits"
+        os.makedirs(split_dir, exist_ok=True)
+        return split_dir / f"split_{scale_tag}.json"
+
+        
+    return get_split_path(phase, scale_tag)
+
+
 

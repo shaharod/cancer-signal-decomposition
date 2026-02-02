@@ -146,6 +146,17 @@ healthy_data_df = pd.DataFrame(
     columns=[f'Healthy-Sample{i}' for i in range(n_healthy_samples)]
 )
 healthy_data_df.to_csv('healthy_data.csv')
+
+healthy_mix_basis = healthy_part[:, n_healthy_samples:]
+
+# Save to CSV so you can use it for your plots later
+healthy_mix_basis_df = pd.DataFrame(
+    healthy_mix_basis, 
+    index=[f'Gene{i}' for i in range(n_genes)],
+    columns=[f'Disease_Sample{i}' for i in range(n_disease_samples)]
+)
+healthy_mix_basis_df.to_csv('healthy_mix_basis.csv')
+
 disease_data_theta05_df = pd.DataFrame(
     disease_data_theta05, index=[f'Gene{i}' for i in range(n_genes)],
     columns=[f'Disease-Sample{i}' for i in range(n_disease_samples)]

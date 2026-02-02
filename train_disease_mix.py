@@ -1,4 +1,5 @@
 import joblib
+import pandas as pd
 import torch
 import config as cfg
 from core.models.model_factory import ModelFactory
@@ -11,16 +12,30 @@ def run_cross_architecture_tournament(mode_val):
     is_random = cfg.RANDOM_THETA_EXP
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
-        train_d, test_d, scaler_d = data_utils.get_ready_tensors(
+
+        ############ USE BOTH HEALTHY AND DISEASE SAMPLES ##############
+        # df_healthy = data_utils.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+        # # 2. Load Disease Data (Theta > 0)
+        # df_disease = data_utils.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode_val)
+        
+        # # 3. Concatenate (Similar to your old 'pd.concat' logic)
+        # df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
+
+        # train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
+        
+        # train_t, test_t, scaler = data_utils.get_ready_tensors_df(train_df, test_df, scale)
+        # raise ValueError(f"train is {train_t.shape} and test is {test_t.shape}")
+
+        # Move disease tensors to GPU
+        # train_d = train_t.to(cfg.DEVICE)
+        # test_d = test_t.to(cfg.DEVICE)
+        ############ USE ONLY DISEASE SAMPLES ##############
+        train_d, test_d, scaler = data_utils.get_ready_tensors(
             cfg.DISEASE_GENES_PATH,
             split_path=cfg.get_split_path("disease", tag), use_scaling=scale,
              theta_path=cfg.THETA_PATH,
              mode=mode_val
         )
-
-        # Move disease tensors to GPU
-        train_d = train_d.to(cfg.DEVICE)
-        test_d = test_d.to(cfg.DEVICE)
 
         input_dim = train_d.shape[1] - 1 
         # --- AUDIT PRINT ---
@@ -67,7 +82,7 @@ def run_cross_architecture_tournament(mode_val):
                 pca_d_obj = pca_utils.train_single_pca(disease_only_features, enc) 
                 
                 full_pca_mix = ModelFactory.create_mix_model(pca_h_obj, pca_d_obj)
-                bench_trainer = Trainer(full_pca_mix, scaler=scaler_d, device=cfg.DEVICE)
+                bench_trainer = Trainer(full_pca_mix, scaler=scaler, device=cfg.DEVICE)
                 pca_bench_val_mse = bench_trainer.get_mse(test_d)
                 pca_bench_train_mse = bench_trainer.get_mse(train_d) 
                 
@@ -89,7 +104,7 @@ def run_cross_architecture_tournament(mode_val):
                 mix_model = ModelFactory.create_mix_model(h_obj, pca_d_obj)
                 
                 # Evaluate
-                bench_trainer = Trainer(mix_model, scaler=scaler_d, device=cfg.DEVICE)
+                bench_trainer = Trainer(mix_model, scaler=scaler, device=cfg.DEVICE)
                 val_mse = bench_trainer.get_mse(test_d)
                 train_mse = bench_trainer.get_mse(train_d)
                 
@@ -105,13 +120,15 @@ def run_cross_architecture_tournament(mode_val):
             # --- TOURNAMENT: CROSS-ARCHITECTURE AE MIX ---
             for d_arch in cfg.MODEL_TYPES:
                 for h_name, h_obj in healthy_library:
+                    if h_name != "pca" and h_name != "PCA": continue
                     label = f"mix_H-{h_name}_D-{d_arch}"
+
                     print(f"Testing: {label} | {tag} | Enc: {enc}")
                     
                     disease_model = ModelFactory.create_model(d_arch, input_dim, enc, cfg.H1, cfg.H2)
                     mix_model = ModelFactory.create_mix_model(h_obj, disease_model)
                     
-                    trainer = Trainer(mix_model, scaler=scaler_d, lr=cfg.LR, device=cfg.DEVICE)
+                    trainer = Trainer(mix_model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)
                     history, best_info = trainer.fit(train_d, test_d, epochs=cfg.EPOCHS_NUM)
                     
                     out_dir = cfg.get_path("disease", tag, label, enc, folder_type=cfg.MODELS_SUBFOLDER)
@@ -128,14 +145,14 @@ if __name__ == "__main__":
         print("="*40)
         
         # Set the flags so get_path and get_ready_tensors behave correctly
-        # if mode == "true":
-        #     cfg.RANDOM_THETA_EXP = False
-        #     cfg.FIXED_THETA_EXP = False
-        # elif mode == "random":
-        #     cfg.RANDOM_THETA_EXP = True
-        #     cfg.FIXED_THETA_EXP = False
-        # elif mode == "fixed":
-        #     cfg.RANDOM_THETA_EXP = False
-        #     cfg.FIXED_THETA_EXP = True
+        if mode == "true":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = False
+        elif mode == "random":
+            cfg.RANDOM_THETA_EXP = True
+            cfg.FIXED_THETA_EXP = False
+        elif mode == "fixed":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = True
             
-        run_cross_architecture_tournament('random')
+        run_cross_architecture_tournament(mode)
