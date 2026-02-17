@@ -15,32 +15,7 @@ import pandas as pd
 SCALED = True
 UNSCALED = False
 
-def load_reconstruction_data(phase):
-    """
-    Loads the validation data (Mixed Input and Clean Ground Truth).
-    Matches your requested structure using config paths.
-    """
-    if phase == "healthy":
-        mix_file = cfg.HEALTHY_GENES_PATH  # Input is pure healthy data
-        truth_file = cfg.HEALTHY_GENES_PATH
-    else:
-        mix_file = cfg.DISEASE_GENES_PATH  # Input is mixed data
-        truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
-
-    # 2. Validation
-    if not mix_file.exists() or not truth_file.exists():
-        print(f"⚠️ Warning: Reconstruction data not found:\n {mix_file}\n {truth_file}")
-        return None, None
-        
-    # 3. Load & Transpose (Genes should be columns for the model)
-    # Using 'T' because typically gene files are (Genes x Samples), but models expect (Samples x Genes)
-    df_mixed = pd.read_csv(mix_file, index_col=0).T
-    df_pure  = pd.read_csv(truth_file, index_col=0).T
-    
-    return df_mixed, df_pure
-
-
-def collect_phase_data(phase, model_labels):
+def collect_phase_data(phase, model_labels, is_mixed):
     """
     getting trained models history and data from models
     
@@ -53,12 +28,10 @@ def collect_phase_data(phase, model_labels):
     data_u = {}
 
     for label, model_tag in model_labels.items():
-        data_s[label] = au.load_data_for_analysis(SCALED, model_tag, phase)
-        data_u[label] = au.load_data_for_analysis(UNSCALED, model_tag, phase)
+        data_s[label] = au.load_data_for_analysis(SCALED, model_tag, phase, is_mixed)
+        data_u[label] = au.load_data_for_analysis(UNSCALED, model_tag, phase, is_mixed)
 
     return data_s, data_u
-
-
 
 def print_data(data_s, data_u):
     """
@@ -89,7 +62,7 @@ def print_data(data_s, data_u):
                 print(f"  [Enc {enc:3}]: Train Pts: {t_len:4} | Eval Pts: {e_len:4} | Test MSE: {mse_val:.6f}")
 
 
-def analyze_disease_mix(phase='disease'):
+def analyze_disease_mix(is_mixed, phase='disease'):
 
     # all possible combinations of healthy baselines with disease
     disease_mix_labels = {
@@ -118,7 +91,7 @@ def analyze_disease_mix(phase='disease'):
     for baseline, labels in disease_mix_labels.items():
 
         # collect data for the current baseline
-        data_s, data_u = collect_phase_data(phase, model_labels=labels)
+        data_s, data_u = collect_phase_data(phase, model_labels=labels, is_mixed=is_mixed)
 
         # getting mse values for plotting
         for data_type in [data_s, data_u]:
@@ -214,7 +187,8 @@ if __name__ == '__main__':
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
         analyze_healthy_model()
-        analyze_disease_mix()
+        is_mixed = True # NOTE IMPORTANT! check who we are analyzing, all samples or only disease
+        analyze_disease_mix(is_mixed)
 
     # if cfg.SYNTHETIC_DATA:    
     #     analyze_reconstruction()

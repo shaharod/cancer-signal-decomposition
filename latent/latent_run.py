@@ -30,7 +30,7 @@ def run_visualization_pipeline(phase, model_tags, data_path):
         tag = "scaled" if is_scaled else "unscaled"
         print(f"\n>>> Starting Comprehensive Analysis: {phase} ({tag})")        
         # 1. Dynamically resolve the split path for THIS specific experiment/tag
-        split_path = cfg.get_split_path(phase, tag)
+        split_path = cfg.get_split_path(phase, tag, False) #TODO notice the is_mixed is False, if we want latent of all samples when running disease - need to change this
         
         # 2. Load the IDs for THIS phase/tag
         train_ids, test_ids = du.load_split(split_path)
@@ -42,7 +42,7 @@ def run_visualization_pipeline(phase, model_tags, data_path):
         # 4. Load tensors using the phase-specific data path
         train_t, test_t, _ = du.get_ready_tensors(
             data_path, 
-            split_path=cfg.get_split_path(phase, tag),
+            split_path=split_path,
             use_scaling=is_scaled
         )
         X_combined = torch.cat([train_t, test_t], dim=0)

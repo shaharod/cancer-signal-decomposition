@@ -14,7 +14,7 @@ def train_all_healthy():
         # 1. Prepare Data & Split
         train_h, test_h, scaler = data_utils.get_ready_tensors(
             cfg.HEALTHY_GENES_PATH, 
-            split_path=cfg.get_split_path("healthy", tag),
+            split_path=cfg.get_split_path("healthy", tag, False),
             use_scaling=scale
         )
 
@@ -25,7 +25,7 @@ def train_all_healthy():
         # 2. PCA Baselines (Train and save immediately)
         pca_models = pca_utils.train_pca_collection(train_h, cfg.ENCODING_SIZES)
         for enc, mod in pca_models.items():
-            path = cfg.get_path(phase="healthy", scale_tag=tag, model_type="pca", enc=enc, folder_type=cfg.MODELS_SUBFOLDER)
+            path = cfg.get_path(phase="healthy", scale_tag=tag, model_type="pca", enc=enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
             pca_utils.save_pca_model(pca_model=mod, folder=path)
             train_mse = pca_utils.get_pca_mse(mod, train_h, scaler)
             val_mse = pca_utils.get_pca_mse(mod, test_h, scaler)
@@ -40,7 +40,7 @@ def train_all_healthy():
             for enc in cfg.ENCODING_SIZES:
                 print(f"Training: {arch} | {tag} | Enc: {enc}")
                 
-                path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER)
+                path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
                 model = ModelFactory.create_model(arch, train_h.shape[1]-1, enc, cfg.H1, cfg.H2).to(cfg.DEVICE)
                 print(model)
                 trainer = Trainer(model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)
@@ -61,7 +61,7 @@ def fix_missing_meta():
         
         for arch in cfg.MODEL_TYPES:
             for enc in cfg.ENCODING_SIZES:
-                path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER)
+                path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
                 history_path = os.path.join(path, "history.json")
                 meta_path = os.path.join(path, "best_meta.json")
 

@@ -6,7 +6,7 @@ EVAL_LOSS_IDX  = 1
 TEST_MSE_IDX   = 2
 
 
-def load_data_for_analysis(scale_bool, model_tag, phase="healthy") -> tuple[dict, dict, dict]:
+def load_data_for_analysis(scale_bool, model_tag, phase="healthy", is_mixed=False) -> tuple[dict, dict, dict]:
     """Loads history and meta for all encodings for a specific model tag."""
     tag = "scaled" if scale_bool else "unscaled"
 
@@ -15,7 +15,7 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy") -> tuple[dict
     test_mse = {}
 
     for enc in cfg.ENCODING_SIZES:
-        path = cfg.get_path(phase, tag, model_tag, enc, folder_type=cfg.MODELS_SUBFOLDER)
+        path = cfg.get_path(phase, tag, model_tag, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
 
         if model_tag == "pca" or model_tag == "mix_H-pca_D-pca":
             res = io.load_results(path, "results.json")
