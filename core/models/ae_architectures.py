@@ -7,7 +7,7 @@ class Basic_AE(nn.Module):
         super().__init__()
         self.in_features = input_size # Added for the Trainer to identify input width
         self.encoder = nn.Sequential(nn.Linear(input_size, encoding_size))
-        self.decoder = nn.Sequential(nn.Linear(encoding_size, input_size), nn.ReLU() ) #, nn.ReLU()
+        self.decoder = nn.Sequential(nn.Linear(encoding_size, input_size), nn.ReLU() ) 
         nn.init.constant_(self.decoder[-2].bias, 50.0)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

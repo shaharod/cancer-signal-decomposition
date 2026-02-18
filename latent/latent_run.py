@@ -100,7 +100,8 @@ def run_visualization_pipeline(phase, model_tags, data_path):
 if __name__ == '__main__':
     # Run for Healthy
     run_visualization_pipeline("healthy", cfg.MODEL_TYPES + ["pca"], cfg.HEALTHY_GENES_PATH)
+     #TODO add here for disease when we reach this stage of latent representation
     
     # EXAMPLE: Run for Disease (Add your specific mixed model tags here)
     # disease_models = ["mix_H-pca_D-pca", "mix_H-ae_layered_D-ae_layered"]
-    # run_visualization_pipeline("disease", disease_models, cfg.DISEASE_GENES_PATH)
+    # run_visualization_pipeline("disease", disease_models, cfg.)
