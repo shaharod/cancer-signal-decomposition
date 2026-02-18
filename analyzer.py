@@ -92,7 +92,9 @@ def analyze_disease_mix(is_mixed, phase='disease'):
 
         # collect data for the current baseline
         data_s, data_u = collect_phase_data(phase, model_labels=labels, is_mixed=is_mixed)
-
+        if not data_s and not data_u:
+            print(f"!!! WARNING: No data found for {baseline} with is_mixed={is_mixed}. Check your folder structure.")
+            continue
         # getting mse values for plotting
         for data_type in [data_s, data_u]:
             for model_name in data_type:
@@ -107,7 +109,7 @@ def analyze_disease_mix(is_mixed, phase='disease'):
                         mse_dict[enc] = [val]
 
         # group-level save path per baseline
-        group_save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER) / f"Tournament_H-{baseline}"
+        group_save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{baseline}"
         group_save_path.mkdir(parents=True, exist_ok=True)
 
         zoom = {
@@ -152,9 +154,9 @@ def analyze_healthy_model(phase='healthy'):
     }
 
     # getting data and path
-    data_s, data_u = collect_phase_data(phase, model_labels=model_labels)
+    data_s, data_u = collect_phase_data(phase, model_labels=model_labels, is_mixed=False)
     save_path = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER)
-
+    
 
     # plotting
                 ## Sarina plot additions ##
@@ -186,9 +188,9 @@ if __name__ == '__main__':
             cfg.FIXED_THETA_EXP = True
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
-        analyze_healthy_model()
-        is_mixed = True # NOTE IMPORTANT! check who we are analyzing, all samples or only disease
-        analyze_disease_mix(is_mixed)
+        analyze_disease_mix(is_mixed=True) #both healthy and disease samples in training
+        analyze_disease_mix(is_mixed=False) #disease samples only
+    analyze_healthy_model()
 
     # if cfg.SYNTHETIC_DATA:    
     #     analyze_reconstruction()

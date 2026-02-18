@@ -16,7 +16,7 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy", is_mixed=Fals
 
     for enc in cfg.ENCODING_SIZES:
         path = cfg.get_path(phase, tag, model_tag, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
-
+        print(path)
         if model_tag == "pca" or model_tag == "mix_H-pca_D-pca":
             res = io.load_results(path, "results.json")
             if res:

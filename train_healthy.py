@@ -14,7 +14,7 @@ def train_all_healthy():
         # 1. Prepare Data & Split
         train_h, test_h, scaler = data_utils.get_ready_tensors(
             cfg.HEALTHY_GENES_PATH, 
-            split_path=cfg.get_split_path("healthy", tag, False),
+            split_path=cfg.get_split_path("healthy", tag, is_mixed=False),
             use_scaling=scale
         )
 

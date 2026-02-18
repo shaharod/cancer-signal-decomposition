@@ -157,4 +157,6 @@ if __name__ == "__main__":
             cfg.RANDOM_THETA_EXP = False
             cfg.FIXED_THETA_EXP = True
             
-        run_cross_architecture_tournament(mode)
+        run_cross_architecture_tournament(mode, is_mixed=False)
+        # run_cross_architecture_tournament(mode, is_mixed=True)
+

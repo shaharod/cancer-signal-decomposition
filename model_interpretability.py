@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from scipy import stats
+from sklearn.metrics import r2_score
 from core.models.model_factory import ModelFactory
 
 import pandas as pd
@@ -186,7 +187,6 @@ def load_revived_model(h_type, d_type=None, enc=8, scale_bool=False, is_mixed=Fa
     
     return None
 
-
 def plot_consolidated_heatmaps(base_name, models_dict, scale_bool=False, is_mixed=False):
     """
     Generates a single grid of heatmaps: 
@@ -236,17 +236,41 @@ def plot_consolidated_heatmaps(base_name, models_dict, scale_bool=False, is_mixe
     print(f"✅ Consolidated heatmap saved to: {save_path}")
     plt.close()
 
-
-def fix_df_data(scale_bool, mode):
+# def fix_df_data(scale_bool, mode):
+#     tag = "scaled" if scale_bool else "unscaled"
+#     df_d = du.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
+#     df_h = du.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+#     df_combined = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
+#     tournament_split_path = cfg.get_split_path_new(phase="disease", scale_tag=tag, is_mixed=True)
+#     train_df, test_df = du.get_split_data(df_combined, split_path=tournament_split_path)
+#     # disease_only_split_path = cfg.get_split_path_new("disease", tag, False, mode)
+#     # disease_df_train, disease_df_test = du.get_split_data(df_d, split_path=disease_only_split_path)
+#     return train_df, test_df, None, None# disease_df_train, disease_df_test
+def fix_df_data(scale_bool, mode, is_mixed):
     tag = "scaled" if scale_bool else "unscaled"
+    
+    # 1. Load the core Disease Data
     df_d = du.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
-    df_h = du.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
-    df_combined = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
-    tournament_split_path = cfg.get_split_path_new(phase="disease", scale_tag=tag, is_mixed=True)
-    train_df, test_df = du.get_split_data(df_combined, split_path=tournament_split_path)
-    # disease_only_split_path = cfg.get_split_path_new("disease", tag, False, mode)
-    # disease_df_train, disease_df_test = du.get_split_data(df_d, split_path=disease_only_split_path)
-    return train_df, test_df, None, None# disease_df_train, disease_df_test
+    
+    if is_mixed:
+        # Scenario A: Mixed Dataset (Healthy + Disease)
+        df_h = du.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+        df_target = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
+    else:
+        # Scenario B: Disease Samples Only
+        df_target = df_d
+    
+    # 2. Get the correct split path based on the is_mixed flag
+    tournament_split_path = cfg.get_split_path(
+        phase="disease", 
+        scale_tag=tag, 
+        is_mixed=is_mixed # This ensures you use the correct split file
+    )
+    
+    # 3. Get the train/test split
+    train_df, test_df = du.get_split_data(df_target, split_path=tournament_split_path)
+    
+    return train_df, test_df, None, None
 
 def create_load_model(folder_tag, test_set, gene_size, enc, scale_tag):
     parts = folder_tag.split('_H-')
@@ -261,7 +285,7 @@ def create_load_model(folder_tag, test_set, gene_size, enc, scale_tag):
     else:
         model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2)
     ext = "model.joblib" if is_pca else "model.pt"
-    model_path = cfg.get_path_new('disease', scale_tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=True) / ext
+    model_path = cfg.get_path('disease', scale_tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=True) / ext
     if not model_path.exists():
         return None, None, None, None
     if is_pca:
@@ -269,9 +293,20 @@ def create_load_model(folder_tag, test_set, gene_size, enc, scale_tag):
         print(f"DEBUG: Model Disease Layer: {model.disease}")
         print(f"DEBUG: PCA Components Shape: {pca_sk.components_.shape}")   
         print(f"DEBUG: Target Components Shape: {model.disease.components.shape}")
-        model.disease.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
-        model.disease.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+        # model.disease.mean.data = torch.tensor(pca_sk.mean_, dtype=torch.float32)
+        # model.disease.components.data = torch.tensor(pca_sk.components_, dtype=torch.float32)
+        # Use copy_ for in-place data transfer
+        model.disease.mean.data.copy_(torch.from_numpy(pca_sk.mean_).float())
+        model.disease.components.data.copy_(torch.from_numpy(pca_sk.components_).float())
+        
+        # Final Verification
+        comp_sum = model.disease.components.sum().item()
+        print(f"DEBUG: PCA Load Check - Components Sum: {comp_sum:.4f}")
+        if comp_sum == 0:
+            print("!!! WARNING: PCA components are still zero after loading!")
+            raise ValueError()
     else:
+
         checkpoint = torch.load(model_path, map_location="cpu")
         if isinstance(checkpoint, dict):
             state_dict = checkpoint.get('model_state_dict', 
@@ -295,7 +330,7 @@ def create_load_model(folder_tag, test_set, gene_size, enc, scale_tag):
         model_outputs = model(test_set)        
     return model_outputs
 
-
+## this function right now works with interpreting the models that were trained with all samples - healthy and disease
 def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
     """
     Can deal with a mixed dataset, will divide to 4 plots where we have the 2 plots of 500 genes and then 
@@ -309,7 +344,7 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
     print(f"input size {input_size}") 
     gene_size = input_size
     print(f"gene size {gene_size}") 
-    train_df, test_df, _, _ = fix_df_data(scale_bool=scale_bool, mode=mode) ## The test has the mix samples!! of healthy and disease
+    train_df, test_df, _, _ = fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=True) ## The test has the mix samples!! of healthy and disease
     print (f'test size is {test_df.shape}')
     test_no_theta_t = torch.Tensor(test_df.drop(columns=['theta_value']).values).float()
     test_theta_t = torch.Tensor(test_df[['theta_value']].values).float()
@@ -413,13 +448,34 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
                     y_vals = recon_mix.flatten().numpy()                # Total Output
                     
                     # Use hexbin for speed/density with 1000s of points
-                    ax_scatter.hexbin(x_vals, y_vals, gridsize=30, cmap='Blues', mincnt=1)
-                    
+                    # ax_scatter.hexbin(x_vals, y_vals, gridsize=30, cmap='Blues', mincnt=1)
+                    color_dict = {"Healthy Sample": "#2ecc71", "Disease Sample": "#e74c3c"}
+                    sns.scatterplot(x=x_vals, y=y_vals, s=1, alpha=0.4, hue=flat_sample_labels,
+                                    ax=ax_scatter,
+                                    hue_order=["Disease Sample", "Healthy Sample"],
+                                       palette=color_dict, 
+                                       edgecolors='none')
                     # Add Identity Line
                     max_val = max(x_vals.max(), y_vals.max())
-                    ax_scatter.plot([0, max_val], [0, max_val], 'r--', alpha=0.5)
-                    
+                    # ax_scatter.plot([0, max_val], [0, max_val], 'r--', alpha=0.5)
+                    # Check the labels themselves
+                    unique_labels, counts = np.unique(flat_sample_labels, return_counts=True)
+                    print(f"--- [PLOT AUDIT] ---")
+                    for label, count in zip(unique_labels, counts):
+                        print(f"Label: {label} | Count: {count}")
+
+                    ax_scatter.plot([0, max_val], [0, max_val], color='#e74c3c', linestyle='--', linewidth=1, label='Identity')
+                    r2 = r2_score(x_vals, y_vals)
+                    pearson_r, _ = stats.pearsonr(x_vals, y_vals)
+
+                    # Display them on the plot
+                    text_str = f'$R^2 = {r2:.3f}$\nPearson $r = {pearson_r:.3f}$'
+                    ax_scatter.text(0.05, 0.95, text_str, transform=ax_scatter.transAxes, 
+                                    fontsize=10, verticalalignment='top', 
+                                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+
                     ax_scatter.set_title(f"{model_label} (Enc {enc})")
+
                     if col_idx == 0: ax_scatter.set_ylabel("Total Recon (H+D)")
                     if row_idx == n_rows - 1: ax_scatter.set_xlabel("Original Input")
                 except Exception as e:
@@ -428,7 +484,7 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
         
         plt.figure(fig.number)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        out_folder = cfg.get_path_new("disease", folder_type=cfg.PLOTS_SUBFOLDER, all_or_no=True) / f"Tournament_H-{base_name}"
+        out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=True) / f"Tournament_H-{base_name}"
         os.makedirs(out_folder, exist_ok=True)
         plt.savefig(out_folder / f"{save_path}_{tag}_branches.png", dpi=150)
         plt.close()
@@ -456,10 +512,12 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
     print(f"input size {input_size}") 
     gene_size = input_size-1
     print(f"gene size {gene_size}") 
-
+    if gene_size != 1000:
+        raise ValueError("in disease portion, something is wrongggg in gene size")
+    
     tournament_split_path = cfg.get_split_path("disease", tag, False)
     train_df, test_df = du.get_split_data(mix_disease, split_path=tournament_split_path)
-    train_all_try, test_all_try, train_disease_try, test_disease_try = fix_df_data(scale_bool=scale_bool, mode=mode)
+    train_disease_try, test_disease_try, _, _ = fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=False)
     if train_df.equals(train_disease_try) and test_df.equals(test_disease_try):
         print ("THE TRAIN/TEST DFS FOR DISEASE ONLY ARE EQUAL LIKE THIS")
     else:
@@ -477,10 +535,13 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
         fig.suptitle(f"Disease Signal Reconstruction (Phase: DISEASE MIX | Base: {base_name.upper()})\n"
                      f"Comparing Pure Disease Input vs. Disease Branch Reconstruction (theta: {mode})", 
                      fontsize=20, fontweight='bold', y=0.98)
-
+        fig_scatter, axes_scatter = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6 * n_rows), squeeze=False)
+        fig_scatter.suptitle(f"Disease Samples Training only: Input vs Recon\nBase: {base_name.upper()} | Theta: {mode}", 
+                            fontsize=20, fontweight='bold', y=0.98)
         for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
                 ax = axes[row_idx, col_idx]
+                ax_scatter = axes_scatter[row_idx, col_idx]
                 try:
                     parts = folder_tag.split('_H-')
                     h_and_d = parts[1].split('_D-')
@@ -490,7 +551,7 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
                     model = ModelFactory.create_mix_model(h_model, d_model)
                     is_pca = "pca" in d_type.lower()
                     ext = "model.joblib" if is_pca else "model.pt"
-                    model_path = cfg.get_path('disease', tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, False) / ext
+                    model_path = cfg.get_path('disease', tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=False) / ext
                     if not model_path.exists():
                         ax.text(0.5, 0.5, "Model Not Found", ha='center'); continue
                     
@@ -519,9 +580,24 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
                     
                     flat_disease_input = test_truth_disease.values.flatten()
                     flat_disease_recon = recon_d.numpy().flatten()
-                    print(f"Input flattened length: {len(flat_disease_input)}")
-                    print(f"Recon flattened length: {len(flat_disease_recon)}")
+                    x_vals = test_no_theta_t.flatten().numpy()
+                    y_vals = recon_mix.flatten().numpy()
+                    ax_scatter.scatter(x_vals, y_vals, s=1, alpha=0.1, color="#d20d0d", edgecolor='none')
+                
+                    # Identity Line (Target)
+                    max_val = max(x_vals.max(), y_vals.max())
+                    ax_scatter.plot([0, max_val], [0, max_val], color='#e74c3c', linestyle='--', linewidth=1, label='Identity')
+                    r2 = r2_score(x_vals, y_vals)
+                    pearson_r, _ = stats.pearsonr(x_vals, y_vals)
 
+                    text_str = f'$R^2 = {r2:.3f}$\n$r = {pearson_r:.3f}$'
+                    ax_scatter.text(0.05, 0.95, text_str, transform=ax_scatter.transAxes, 
+                                    fontsize=12, verticalalignment='top', 
+                                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                    
+                    ax_scatter.set_title(f"{model_label} (Enc {enc})")
+                    if col_idx == 0: ax_scatter.set_ylabel("Total Recon")
+                    if row_idx == n_rows - 1: ax_scatter.set_xlabel("Total Input")
                     template = np.array(['Healthy Genes (0-499)'] * 500 + ['Disease Genes (500-999)'] * 500)
                     num_samples = test_no_theta_t.shape[0]
 
@@ -549,11 +625,17 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
                     traceback.print_exc()
                     ax.text(0.5, 0.5, "Inference Error", ha='center', color='red')
 
+        plt.figure(fig.number)
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=False) / f"Tournament_H-{base_name}"
         os.makedirs(out_folder, exist_ok=True)
+
         plt.savefig(out_folder / f"{save_path}_{tag}.png", dpi=150)
         plt.close()
+        plt.figure(fig_scatter.number)
+        fig_scatter.tight_layout(rect=[0, 0.03, 1, 0.95])
+        fig_scatter.savefig(out_folder / f"{save_path}_{tag}_mix_vs_input.png")
+        plt.close(fig_scatter)
 
 
 
@@ -572,28 +654,14 @@ def interpret_disease_mix(phase='disease', mode="true"):
             "ae_layered": "mix_H-pca_D-ae_layered"
             
         }
-        # ,
-        # 'AE-Basic':
-        # {
-        #     "ae_basic": "mix_H-ae_basic_D-ae_basic",
-        #     "ae_layered": "mix_H-ae_basic_D-ae_layered",
-        #     "pca": "mix_H-ae_basic_D-pca"
-        # },
-        # 'AE-Layered':
-        # {
-        #     "ae_basic": "mix_H-ae_layered_D-ae_basic",
-        #     "ae_layered": "mix_H-ae_layered_D-ae_layered",
-        #     "pca": "mix_H-ae_layered_D-pca"
-        # }
     }
 
-    # for baseline, labels in disease_mix_labels.items():
 
-        ##unscaled data reconstructions
+    ##unscaled data reconstructions
 
-    analyze_d_portion_recon_new(disease_mix_labels, False, save_path="Mix_disease_recon", mode=mode)
+    # analyze_d_portion_recon_new(disease_mix_labels, scale_bool=False, save_path="analyze_recon_allSamples_dif", mode=mode)
     # print("################### DISEASE PORTION RECON FUNCTION ###################")
-    # analyze_disease_portion_reconstruction(disease_mix_labels, False, save_path="Disease_reconstruction", mode=mode)
+    analyze_disease_portion_reconstruction(disease_mix_labels, scale_bool=False, save_path="analyze_recon_dSamplesOnly", mode=mode)
 
     all_results = []
     # for base_label, models in disease_mix_labels.items():
@@ -741,12 +809,13 @@ if __name__ == '__main__':
     # # print(f'model type is: 'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
     # print("########### RUNNING HEALTHY MODEL ############")
     # interpret_healthy_model()
+    cfg.FIXED_THETA_EXP = True
+    cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_theta05.csv"
+    print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
     interpret_disease_mix(mode="fixed")
-    # cfg.FIXED_THETA_EXP = True
-    # print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
-    # interpret_disease_mix()
-    # cfg.FIXED_THETA_EXP = False
-    # print("########### RUNNING MIX MODEL UNIFORM THETA ############")
-    # interpret_disease_mix()
+    cfg.FIXED_THETA_EXP = False
+    cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_uniform_theta.csv"
+    print("########### RUNNING MIX MODEL UNIFORM THETA ############")
+    interpret_disease_mix(mode="true")
 
 
