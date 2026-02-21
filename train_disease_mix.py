@@ -10,6 +10,7 @@ from utils import data_utils, pca_utils
 def run_cross_architecture_tournament(mode_val, is_mixed):
     print("\n>>> STARTING PHASE 2: CROSS-ARCHITECTURE TOURNAMENT")
     is_random = cfg.RANDOM_THETA_EXP
+    disease_gene_path = cfg.get_disease_gene_path(mode_val)
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
 
@@ -17,7 +18,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         if is_mixed:
             df_healthy = data_utils.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
             # 2. Load Disease Data (Theta > 0)
-            df_disease = data_utils.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode_val)
+            df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.THETA_PATH, mode=mode_val) #cfg.DISEASE_GENES_PATH
             
             # 3. Concatenate (Similar to your old 'pd.concat' logic)
             df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
@@ -33,7 +34,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         else:
             ############ USE ONLY DISEASE SAMPLES ##############
             train_d, test_d, scaler = data_utils.get_ready_tensors(
-                cfg.DISEASE_GENES_PATH,
+                disease_gene_path,
                 split_path=cfg.get_split_path("disease", tag, is_mixed), use_scaling=scale,
                 theta_path=cfg.THETA_PATH,
                 mode=mode_val

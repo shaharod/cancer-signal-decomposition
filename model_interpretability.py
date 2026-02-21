@@ -19,7 +19,7 @@ import pandas as pd
 SCALED = True
 UNSCALED = False
 
-def load_reconstruction_data(phase):
+def load_reconstruction_data(phase, mode):
     """
     Loads the validation data (Mixed Input and Clean Ground Truth).
     Matches your requested structure using config paths.
@@ -28,7 +28,7 @@ def load_reconstruction_data(phase):
         mix_file = cfg.HEALTHY_GENES_PATH  # Input is pure healthy data
         truth_file = cfg.HEALTHY_GENES_PATH
     else:
-        mix_file = cfg.DISEASE_GENES_PATH  # Input is mixed data
+        mix_file =cfg.get_disease_gene_path(mode)  # Input is mixed data
         truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
     print(f"truth_file: {truth_file}")
     print(f"mix file: {mix_file}")
@@ -284,6 +284,7 @@ def create_load_model(folder_tag, test_set, gene_size, enc, scale_tag):
         model = ModelFactory.create_mix_model(h_model, d_model)
     else:
         model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2)
+    print(f"curr model is {h_and_d} and has:\n {model}")        
     ext = "model.joblib" if is_pca else "model.pt"
     model_path = cfg.get_path('disease', scale_tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=True) / ext
     if not model_path.exists():
@@ -336,8 +337,8 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
     Can deal with a mixed dataset, will divide to 4 plots where we have the 2 plots of 500 genes and then 
     plot separatley for the healthy samples in the mix, and for the disease samples in the mix
     """
-    mix_disease, true_disease  = load_reconstruction_data('disease') 
-    _, true_healthy = load_reconstruction_data('healthy')
+    mix_disease, true_disease  = load_reconstruction_data('disease', mode) 
+    _, true_healthy = load_reconstruction_data('healthy', mode)
     if mix_disease is None: return
     tag = "scaled" if scale_bool else "unscaled"
     input_size = mix_disease.shape[1]
@@ -497,7 +498,7 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
 
 ##### graph for when we learned only with disease samples #####
 def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, mode):
-    mix_disease, true_disease  = load_reconstruction_data('disease') 
+    mix_disease, true_disease  = load_reconstruction_data('disease', mode) 
     theta = pd.read_csv(cfg.THETA_PATH, index_col=0)
     if mode == 'fixed': 
         theta = mix_disease['theta_value'] = 0.5
@@ -659,7 +660,7 @@ def interpret_disease_mix(phase='disease', mode="true"):
 
     ##unscaled data reconstructions
 
-    # analyze_d_portion_recon_new(disease_mix_labels, scale_bool=False, save_path="analyze_recon_allSamples_dif", mode=mode)
+    analyze_d_portion_recon_new(disease_mix_labels, scale_bool=False, save_path="analyze_recon_allSamples_dif", mode=mode)
     # print("################### DISEASE PORTION RECON FUNCTION ###################")
     analyze_disease_portion_reconstruction(disease_mix_labels, scale_bool=False, save_path="analyze_recon_dSamplesOnly", mode=mode)
 
@@ -694,13 +695,13 @@ def interpret_disease_mix(phase='disease', mode="true"):
     # save_performance_comparison(all_results)
 
 
-def analyze_healthy_reconstruction(labels_dict, scale_bool, save_path):
+def analyze_healthy_reconstruction(labels_dict, scale_bool, save_path, mode="true"):
     """
     Analyzes Step 1 (Healthy Model) reconstruction by splitting genes into 
     Active (0-499) and Inactive (500-999) healthy modules.
     """
     # 1. Load Data (Phase is strictly 'healthy')
-    input_df, truth_df = load_reconstruction_data('healthy')
+    input_df, truth_df = load_reconstruction_data('healthy', mode)
     if input_df is None: return
     
     num_samples = len(input_df)

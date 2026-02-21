@@ -192,7 +192,4 @@ if __name__ == '__main__':
         analyze_disease_mix(is_mixed=False) #disease samples only
     analyze_healthy_model()
 
-    # if cfg.SYNTHETIC_DATA:    
-    #     analyze_reconstruction()
-
 

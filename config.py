@@ -21,6 +21,22 @@ FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
+def get_theta_mode():
+    if FIXED_THETA_EXP:
+        return "fixed"
+    if RANDOM_THETA_EXP: 
+        return "random"
+    return "true"
+
+def get_disease_gene_path(mode_val):
+    # mode_val = get_theta_mode()
+    path = DATA_SUB
+    if mode_val == "true":
+        return path/ "disease_data_uniform_theta.csv" if SYNTHETIC_DATA else path / "GeneMatrix_H3K4me3_crc.csv"
+    if mode_val == "fixed" and not SYNTHETIC_DATA:
+        raise ValueError("Still havent fixed this")
+    if mode_val == "fixed":
+        return path/"disease_data_theta05.csv"
 
 
 # ----- Input Data Paths ------
@@ -28,17 +44,19 @@ DATA_SUB = DATA_PATH / ('synthetic' if SYNTHETIC_DATA else 'real')
 
 if SYNTHETIC_DATA:
     HEALTHY_GENES_PATH = DATA_SUB / "healthy_data.csv"
-    DISEASE_GENES_PATH = DATA_SUB / ("disease_data_theta05.csv" if FIXED_THETA_EXP else "disease_data_uniform_theta.csv")
+    # DISEASE_GENES_PATH = DATA_SUB / ("disease_data_theta05.csv" if FIXED_THETA_EXP else "disease_data_uniform_theta.csv")
     THETA_PATH         = DATA_SUB / "syn_theta_values.csv"
 else:
     HEALTHY_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_healthy.csv"
-    DISEASE_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_crc.csv"
+    # DISEASE_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_crc.csv"
     THETA_PATH         = DATA_SUB / "theta_CRC_passedQC.csv"
+# DISEASE_GENES_PATH = get_disease_gene_path()
 
 SYN_MIX_DISEASE_PART = DATA_SUB / "pure_disease_truth.csv"
 SYN_MIX_HEALTHY_PART = DATA_SUB / "healthy_mix_basis.csv"
 SIG_PATH = DATA_SUB / "SIGpassClinicalQC_H3K4me3.csv"
 
+    
 # ---- Hyperparameters ----
 EPOCHS_NUM     = 300
 BATCH_SIZE     = 32
