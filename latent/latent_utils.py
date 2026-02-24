@@ -1,133 +1,211 @@
 import os
 import joblib
 import torch
+import umap
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 from pathlib import Path
+import utils.model_utils as mu
 
 import config as cfg
 from core.models.model_factory import ModelFactory
 
 
-# FIXME: i have no idea what is going on here, change or fix or whatever
 
 # -------------------------------------------------------------------
 # 1. LOADERS (MODEL & WEIGHTS)
 # -------------------------------------------------------------------
 
-def load_ae_models(phase, model_tag, scaled, encoding_sizes, input_size, device=cfg.DEVICE):
-    """Global Loader for AE models across phases."""
+############### Get rid of these two, redundant ########################
+# def load_ae_models(phase, model_tag, scaled, encoding_sizes, input_size, device=cfg.DEVICE):
+#     """Global Loader for AE models across phases."""
 
-    scale_str = "scaled" if scaled else "unscaled"
-    models_dict = {}
+#     scale_str = "scaled" if scaled else "unscaled"
+#     models_dict = {}
 
-    for enc in encoding_sizes:
-        enc_dir = cfg.get_path(phase, scale_str, model_tag, enc)
-        model_path = enc_dir / "model.pt"
+#     for enc in encoding_sizes:
+#         enc_dir = cfg.get_path(phase, scale_str, model_tag, enc)
+#         model_path = enc_dir / "model.pt"
 
-        if not model_path.exists():
-            print(f"[Warning] Model weights not found: {model_path}")
-            continue
+#         if not model_path.exists():
+#             print(f"[Warning] Model weights not found: {model_path}")
+#             continue
 
-        model = ModelFactory.create_model(model_tag, input_size, enc).to(device)
-        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
-        model.eval()
+#         model = ModelFactory.create_model(model_tag, input_size, enc).to(device)
+#         model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
+#         model.eval()
 
-        models_dict[enc] = model
-        print(f"[Loaded] {model_tag} ({enc}-dim) Phase: {phase}")
+#         models_dict[enc] = model
+#         print(f"[Loaded] {model_tag} ({enc}-dim) Phase: {phase}")
 
-    return models_dict
+#     return models_dict
 
 
-def load_pca_models(phase, scaled, encoding_sizes):
-    """Loads saved sklearn PCA models."""
-    scale_str = "scaled" if scaled else "unscaled"
-    pca_dict = {}
+# def load_pca_models(phase, scaled, encoding_sizes):
+#     """Loads saved sklearn PCA models."""
+#     scale_str = "scaled" if scaled else "unscaled"
+#     pca_dict = {}
 
-    for enc in encoding_sizes:
-        enc_dir = cfg.get_path(phase, scale_str, "pca", enc)
-        pca_path = enc_dir / "model.joblib"
+#     for enc in encoding_sizes:
+#         enc_dir = cfg.get_path(phase, scale_str, "pca", enc)
+#         pca_path = enc_dir / "model.joblib"
 
-        if not pca_path.exists():
-            continue
+#         if not pca_path.exists():
+#             continue
 
-        pca = joblib.load(pca_path)
-        pca_dict[enc] = pca
-    return pca_dict
+#         pca = joblib.load(pca_path)
+#         pca_dict[enc] = pca
+#     return pca_dict
+############### Get rid of these two, redundant ########################
+
 
 # -------------------------------------------------------------------
 # 2. LATENT EXTRACTION (DATA -> Z)
 # -------------------------------------------------------------------
 
-def get_ae_latents(phase, model_tag, scaled, encoding_sizes, X_tensor, device="cpu"):
-    """Extracts latent Z from AE models."""
-    input_size = X_tensor.shape[1]
-    models_dict = load_ae_models(phase, model_tag, scaled, encoding_sizes, input_size, device)
+############### Get rid of these two, redundant ########################
+# def get_ae_latents(phase, model_tag, scaled, encoding_sizes, X_tensor, device="cpu"):
+#     """Extracts latent Z from AE models."""
+#     input_size = X_tensor.shape[1]
+#     models_dict = load_ae_models(phase, model_tag, scaled, encoding_sizes, input_size, device)
     
+#     latents = {}
+#     for enc_dim, model in models_dict.items():
+#         with torch.no_grad():
+#             # Standardized access via ModelFactory encoder
+#             Z = model.encoder(X_tensor.to(device)).cpu().numpy()
+#         latents[f"{model_tag}_{enc_dim}"] = Z
+#     return latents
+
+# def get_pca_latents(phase, scaled, encoding_sizes, X_np):
+#     """Extracts latent Z from PCA objects."""
+#     pca_models = load_pca_models(phase, scaled, encoding_sizes)
+#     latents = {}
+#     for enc, pca in pca_models.items():
+#         latents[f"pca_{enc}"] = pca.transform(X_np)
+#     return latents
+
+###############################################################################
+def get_standalone_latents(model_type, input_size, enc_sizes, scale_bool, test_set, phase):
     latents = {}
-    for enc_dim, model in models_dict.items():
-        with torch.no_grad():
-            # Standardized access via ModelFactory encoder
-            Z = model.encoder(X_tensor.to(device)).cpu().numpy()
-        latents[f"{model_tag}_{enc_dim}"] = Z
+    for enc in enc_sizes:
+        _, z = mu.create_load_standalone_model(phase=phase, m_type=model_type, enc=enc, scale_bool=scale_bool, input_size=input_size, test_t=test_set)
+        latents[f"{model_type}_enc:{enc}"] = z
     return latents
 
-def get_pca_latents(phase, scaled, encoding_sizes, X_np):
-    """Extracts latent Z from PCA objects."""
-    pca_models = load_pca_models(phase, scaled, encoding_sizes)
+def get_mix_latents(mix_type, input_size, enc_sizes, scale_tag, is_mixed, test_t):
     latents = {}
-    for enc, pca in pca_models.items():
-        latents[f"pca_{enc}"] = pca.transform(X_np)
+    for enc in enc_sizes:
+        _, _, _, z = mu.create_load_mix_model(folder_tag=mix_type, test_set=test_t, gene_size=input_size, enc=enc, scale_tag=scale_tag)
+        latents[f"{mix_type}_enc:{enc}"] = z
     return latents
+
+
+def choose_sig_list(phase):
+    if phase == "synthetic":
+        return cfg.SYN_SIG_LIST
+    if phase == "real":
+        return cfg.REAL_SYN_LIST
+    raise ValueError("Add here other signature lists i might want and have better phase names") #TODO in future, do as error states
 
 # -------------------------------------------------------------------
 # 3. COORDINATE GENERATION & SAVING (Z -> 2D)
 # -------------------------------------------------------------------
 
-def save_latent_visuals(latents_dict, phase, scaled, sig_df, perplexities, split_info=None):
-    """Saves .npy coordinates and individual .png plots to model folders."""
+def generate_coords(Z, method="umap", **kwargs):
+    """
+    Unified interface for dimensionality reduction.
+    """
+    if method == "pca":
+        return PCA(n_components=2).fit_transform(Z)
+    elif method == "umap":
+        reducer = umap.UMAP(
+            n_neighbors=kwargs.get('n_neighbors', 15),
+            min_dist=kwargs.get('min_dist', 0.1),
+            random_state=42
+        )
+        return reducer.fit_transform(Z)
+    elif method == "tsne":
+        return TSNE(
+            n_components=2, 
+            perplexity=kwargs.get('perplexity', 30),
+            init="pca", 
+            random_state=42
+        ).fit_transform(Z)
+    raise ValueError(f"Unknown method: {method}")
+
+
+
+# def save_latent_visuals(latents_dict, phase, scaled, sig_df, perplexities, split_info=None):
+#     """Saves .npy coordinates and individual .png plots to model folders."""
+#     scale_str = "scaled" if scaled else "unscaled"
+    
+#     for name, Z in latents_dict.items():
+#         # Parse name e.g., "ae_layered_32"
+#         parts = name.split("_")
+#         model_tag = "_".join(parts[:-1])
+#         enc_size = parts[-1]
+
+#         # Resolve folder
+#         model_dir = cfg.get_path(phase, scale_str, model_tag, enc_size)
+#         latent_dir = model_dir / "latent_space"
+#         latent_dir.mkdir(parents=True, exist_ok=True)
+
+#         # 1. Compute and Save PCA 2D
+#         pca_2d = PCA(n_components=2).fit_transform(Z)
+#         np.save(latent_dir / "pca_coords.npy", pca_2d)
+
+#         # 2. Compute and Save t-SNE 2D
+#         for perp in perplexities:
+#             tsne_2d = TSNE(
+#                 n_components=2, 
+#                 perplexity=perp, 
+#                 init="pca", 
+#                 learning_rate='auto',
+#                 random_state=42
+#             ).fit_transform(Z)
+
+#             np.save(latent_dir / f"tsne_perp_{perp}_coords.npy", tsne_2d)
+
+#             for sig in cfg.SIG_LIST:
+#                 if sig in sig_df.columns:
+#                     sig_values = sig_df[sig].values
+#                     plot_and_save_single(tsne_2d, sig_values, sig, f"t-SNE (Perp {perp})", latent_dir, model_tag, enc_size)
+
+#         # 3. Generate individual signature plots
+#         for sig in cfg.SIG_LIST:
+#             if sig in sig_df.columns:
+#                 sig_values = sig_df[sig].values
+#                 plot_and_save_single(pca_2d, sig_values, sig, "PCA", latent_dir, model_tag, enc_size)
+
+def save_latent_visuals(latents_dict, phase, scaled, sig_df, methods=["pca", "umap"]):
+    """
+    Iterates through latents and generates the requested 2D projections.
+    """
     scale_str = "scaled" if scaled else "unscaled"
     
     for name, Z in latents_dict.items():
-        # Parse name e.g., "ae_layered_32"
-        parts = name.split("_")
-        model_tag = "_".join(parts[:-1])
-        enc_size = parts[-1]
+        # name format: "mix_H-pca_D-ae_basic_enc8"
+        model_tag = name.split("_enc")[0]
+        enc_size = name.split("_enc")[-1]
 
-        # Resolve folder
-        model_dir = cfg.get_path(phase, scale_str, model_tag, enc_size)
-        latent_dir = model_dir / "latent_space"
+        latent_dir = cfg.get_path(phase, scale_str, model_tag, enc_size) / "latent_space"
         latent_dir.mkdir(parents=True, exist_ok=True)
 
-        # 1. Compute and Save PCA 2D
-        pca_2d = PCA(n_components=2).fit_transform(Z)
-        np.save(latent_dir / "pca_coords.npy", pca_2d)
-
-        # 2. Compute and Save t-SNE 2D
-        for perp in perplexities:
-            tsne_2d = TSNE(
-                n_components=2, 
-                perplexity=perp, 
-                init="pca", 
-                learning_rate='auto',
-                random_state=42
-            ).fit_transform(Z)
-
-            np.save(latent_dir / f"tsne_perp_{perp}_coords.npy", tsne_2d)
-
-            for sig in cfg.SIG_LIST:
-                if sig in sig_df.columns:
-                    sig_values = sig_df[sig].values
-                    plot_and_save_single(tsne_2d, sig_values, sig, f"t-SNE (Perp {perp})", latent_dir, model_tag, enc_size)
-
-        # 3. Generate individual signature plots
-        for sig in cfg.SIG_LIST:
-            if sig in sig_df.columns:
-                sig_values = sig_df[sig].values
-                plot_and_save_single(pca_2d, sig_values, sig, "PCA", latent_dir, model_tag, enc_size)
+        for m in methods:
+            coords = generate_coords(Z, method=m)
+            np.save(latent_dir / f"{m}_coords.npy", coords)
+            
+            # Color by Theta if available in sig_df
+            for col in sig_df.columns:
+                plot_latent_comparison(
+                    coords, sig_df[col].values, col,
+                    title=f"{model_tag} ({enc_size}) {m.upper()}\nColored by: {col}",
+                    save_path=latent_dir / f"{m}_{col}.png"
+                )
 
 def plot_and_save_single(coords, sig_values, sig_name, method, folder, model_tag, enc):
     """Helper to plot a single scatter map."""
@@ -144,6 +222,19 @@ def plot_and_save_single(coords, sig_values, sig_name, method, folder, model_tag
     plt.savefig(folder / f"{method.lower()}_{sig_name}.png", dpi=150)
     plt.close()
 
+def plot_latent_comparison(coords, color_values, label_name, title, save_path):
+    """
+    Standardized scatter plot for any coordinate/color combination.
+    """
+    plt.figure(figsize=(10, 8))
+    # Using 'magma' or 'viridis' for continuous values like Theta
+    sc = plt.scatter(coords[:, 0], coords[:, 1], c=color_values, 
+                      cmap='magma', s=15, alpha=0.7)
+    plt.colorbar(sc, label=label_name)
+    plt.title(title)
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    plt.close()
 # -------------------------------------------------------------------
 # 4. GLOBAL COMPARISON GRIDS
 # -------------------------------------------------------------------
