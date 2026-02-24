@@ -148,6 +148,33 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None):
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
+
+def fix_df_data(scale_bool, mode, is_mixed):
+    tag = "scaled" if scale_bool else "unscaled"
+    
+    # 1. Load the core Disease Data
+    df_d = prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
+    
+    if is_mixed:
+        # Scenario A: Mixed Dataset (Healthy + Disease)
+        df_h = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+        df_target = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
+    else:
+        # Scenario B: Disease Samples Only
+        df_target = df_d
+    
+    # 2. Get the correct split path based on the is_mixed flag
+    tournament_split_path = cfg.get_split_path(
+        phase="disease", 
+        scale_tag=tag, 
+        is_mixed=is_mixed # This ensures you use the correct split file
+    )
+    
+    # 3. Get the train/test split
+    train_df, test_df = get_split_data(df_target, split_path=tournament_split_path)
+    
+    return train_df, test_df
+
 # def update_sample_metadata(log_path, gene_path, train_df, test_df, mode):
     """
     Saves counts into a single JSON file.

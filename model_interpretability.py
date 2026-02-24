@@ -246,31 +246,31 @@ def plot_consolidated_heatmaps(base_name, models_dict, scale_bool=False, is_mixe
 #     # disease_only_split_path = cfg.get_split_path_new("disease", tag, False, mode)
 #     # disease_df_train, disease_df_test = du.get_split_data(df_d, split_path=disease_only_split_path)
 #     return train_df, test_df, None, None# disease_df_train, disease_df_test
-def fix_df_data(scale_bool, mode, is_mixed):
-    tag = "scaled" if scale_bool else "unscaled"
+# def fix_df_data(scale_bool, mode, is_mixed):
+#     tag = "scaled" if scale_bool else "unscaled"
     
-    # 1. Load the core Disease Data
-    df_d = du.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
+#     # 1. Load the core Disease Data
+#     df_d = du.prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
     
-    if is_mixed:
-        # Scenario A: Mixed Dataset (Healthy + Disease)
-        df_h = du.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
-        df_target = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
-    else:
-        # Scenario B: Disease Samples Only
-        df_target = df_d
+#     if is_mixed:
+#         # Scenario A: Mixed Dataset (Healthy + Disease)
+#         df_h = du.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+#         df_target = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
+#     else:
+#         # Scenario B: Disease Samples Only
+#         df_target = df_d
     
-    # 2. Get the correct split path based on the is_mixed flag
-    tournament_split_path = cfg.get_split_path(
-        phase="disease", 
-        scale_tag=tag, 
-        is_mixed=is_mixed # This ensures you use the correct split file
-    )
+#     # 2. Get the correct split path based on the is_mixed flag
+#     tournament_split_path = cfg.get_split_path(
+#         phase="disease", 
+#         scale_tag=tag, 
+#         is_mixed=is_mixed # This ensures you use the correct split file
+#     )
     
-    # 3. Get the train/test split
-    train_df, test_df = du.get_split_data(df_target, split_path=tournament_split_path)
+#     # 3. Get the train/test split
+#     train_df, test_df = du.get_split_data(df_target, split_path=tournament_split_path)
     
-    return train_df, test_df, None, None
+#     return train_df, test_df, None, None
 
 # def create_load_mix_model(folder_tag, test_set, gene_size, enc, scale_tag):
 #     parts = folder_tag.split('_H-')
@@ -345,7 +345,7 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
     print(f"input size {input_size}") 
     gene_size = input_size
     print(f"gene size {gene_size}") 
-    train_df, test_df, _, _ = fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=True) ## The test has the mix samples!! of healthy and disease
+    train_df, test_df = du.fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=True) ## The test has the mix samples!! of healthy and disease
     print (f'test size is {test_df.shape}')
     test_no_theta_t = torch.Tensor(test_df.drop(columns=['theta_value']).values).float()
     test_theta_t = torch.Tensor(test_df[['theta_value']].values).float()
@@ -518,7 +518,7 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
     
     tournament_split_path = cfg.get_split_path("disease", tag, False)
     train_df, test_df = du.get_split_data(mix_disease, split_path=tournament_split_path)
-    train_disease_try, test_disease_try, _, _ = fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=False)
+    train_disease_try, test_disease_try = du.fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=False)
     if train_df.equals(train_disease_try) and test_df.equals(test_disease_try):
         print ("THE TRAIN/TEST DFS FOR DISEASE ONLY ARE EQUAL LIKE THIS")
     else:

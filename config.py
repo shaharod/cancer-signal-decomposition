@@ -93,48 +93,6 @@ DISEASE_OUT_DIR = BASE_EXP_DIR / 'disease_mix'
 # latent representation
 LATENT_ROOT = PROJECT_ROOT / 'latent'
 
-
-
-# def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODELS_SUBFOLDER):
-
-#     # getting phase root
-#     if phase == "disease":
-
-#         if FIXED_THETA_EXP:
-#             root = DISEASE_OUT_DIR / 'disease_mix_fixed_0.5'
-#         elif RANDOM_THETA_EXP:
-#             root = DISEASE_OUT_DIR / 'disease_mix_random_theta'
-#         else:
-#             theta_type = 'uniform' if SYNTHETIC_DATA else 'true'
-#             root = DISEASE_OUT_DIR / f'disease_mix_{theta_type}_theta'
-#     else:
-#         root = HEALTHY_OUT_DIR
-    
-#     # usage category (Models vs Plots)
-#     root = root / folder_type
-    
-#     # creating sub-folder path
-#     if scale_tag is None or model_type is None or enc is None:
-#         path = root
-#     else:
-#         path = root / scale_tag / model_type / f"enc_{enc}"
-
-#     os.makedirs(path, exist_ok=True)
-#     return path
-
-
-# def get_split_path(phase, scale_tag):
-#     """
-#     Ensures all models in a tournament share the same split for fairness.
-#     """
-
-#     # splits are always saved under 'trained_models'
-#     root = get_path(phase, folder_type=MODELS_SUBFOLDER)
-#     split_dir = root / "splits"
-
-#     os.makedirs(split_dir, exist_ok=True)
-#     return split_dir / f"split_{scale_tag}.json"
-
 def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODELS_SUBFOLDER, is_mixed=False):
     # # getting phase root
     # if not is_mixed:
