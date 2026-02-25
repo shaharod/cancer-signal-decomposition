@@ -1,6 +1,31 @@
+"""
+Latent Analysis Pipeline: Cancer Signal Decomposition
+=====================================================
+This script extracts disease-specific latents (Zd) from UniversalMixModels
+and generates UMAP/PCA visualizations.
+
+Usage Examples:
+---------------
+1. Run Tournament Analysis for Synthetic Data:
+   $ python latent_run.py
+
+2. Customizing for 'Smarter' Data:
+   Ensure your input CSV contains 'theta_value' and 'disease_type' columns.
+   The script will automatically generate grids for both PCA and UMAP.
+
+Key Logic:
+----------
+- Extracts Z_d only (ignores the frozen healthy branch).
+- Automatically colors by mixing proportion (Theta) and categorical disease type.
+- Saves raw coordinates (.npy) in model folders and grids in the plots folder.
+"""
+
 import sys
-import os
 from pathlib import Path
+import torch
+import config as cfg
+import latent_utils as lu
+import utils.data_utils as du
 
 # Get the path of the current file's directory
 current_file = Path(__file__).resolve()
@@ -12,11 +37,6 @@ project_root = current_file.parents[1]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-import torch
-import pandas as pd
-import config as cfg
-import latent_utils as lu
-import utils.data_utils as du
 
 
 def run_comprehensive_latent_analysis(phase, is_mixed, mode):
