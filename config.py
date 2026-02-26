@@ -11,7 +11,7 @@ RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
 SYN_SIMPLE=False
-SYN_CMPLX = False
+SYN_CMPLX = True
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
 def get_theta_mode():
