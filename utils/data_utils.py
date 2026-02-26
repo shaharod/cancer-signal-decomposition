@@ -11,9 +11,9 @@ import config as cfg
 def fit_and_scale(train_df, test_df):
     """Scaler fitted only on training genes."""
     scaler = StandardScaler()
-    # Remove theta before scaling
-    train_genes = train_df.drop(columns=['theta_value'])
-    test_genes = test_df.drop(columns=['theta_value'])
+    # Remove theta and disease type if there is before scaling
+    train_genes = train_df.drop(columns=['theta_value', 'disease_type'])
+    test_genes = test_df.drop(columns=['theta_value', 'disease_type'])
     
     train_scaled = scaler.fit_transform(train_genes)
     test_scaled = scaler.transform(test_genes)
@@ -139,15 +139,15 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
         return train_t, test_t, None
     
     # Separate genes from theta
-    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
-    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    dropped_cols_train = torch.tensor(train_df[['theta_value', 'disease_type']].values, dtype=torch.float32)
+    dropped_cols_test = torch.tensor(test_df[['theta_value', 'disease_type']].values, dtype=torch.float32)
     
     # Scale only the genes
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
     
     # Combine back to [Genes | Theta]
-    train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
-    test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
+    train_tensor = torch.cat([train_genes_scaled, dropped_cols_train], dim=1)
+    test_tensor = torch.cat([test_genes_scaled, dropped_cols_test], dim=1)
     return train_tensor, test_tensor, scaler
     
 def get_ready_tensors_df(train_df, test_df, use_scaling=None):

@@ -9,7 +9,7 @@ from utils import data_utils, pca_utils
 
 def run_cross_architecture_tournament(mode_val, is_mixed):
     print("\n>>> STARTING PHASE 2: CROSS-ARCHITECTURE TOURNAMENT")
-    
+
     disease_gene_path = cfg.get_disease_gene_path(mode_val)
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
@@ -40,6 +40,8 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 mode=mode_val
             )
 
+        train_d = train_d[:, :-1]
+        test_d = test_d[:, :-1]
         input_dim = train_d.shape[1] - 1 
         # --- AUDIT PRINT ---
         print(f"Tensor Shape: {train_d.shape}") # Should be (Samples, 20007)
