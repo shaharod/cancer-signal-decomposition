@@ -9,6 +9,7 @@ from utils import data_utils, pca_utils
 
 def run_cross_architecture_tournament(mode_val, is_mixed):
     print("\n>>> STARTING PHASE 2: CROSS-ARCHITECTURE TOURNAMENT")
+    
     disease_gene_path = cfg.get_disease_gene_path(mode_val)
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
