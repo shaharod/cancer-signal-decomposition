@@ -12,8 +12,9 @@ def fit_and_scale(train_df, test_df):
     """Scaler fitted only on training genes."""
     scaler = StandardScaler()
     # Remove theta and disease type if there is before scaling
-    train_genes = train_df.drop(columns=['theta_value', 'disease_type'])
-    test_genes = test_df.drop(columns=['theta_value', 'disease_type'])
+    
+    train_genes = train_df.drop(columns=['theta_value'])
+    test_genes = test_df.drop(columns=['theta_value'])
     
     train_scaled = scaler.fit_transform(train_genes)
     test_scaled = scaler.transform(test_genes)
@@ -131,6 +132,8 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     df_full = prepare_and_align_data(gene_path, theta_path, mode=mode)
     train_df, test_df = get_split_data(df_full, split_path)
     # update_sample_metadata(cfg.LOG_PATH, gene_path, train_df, test_df, mode)
+    train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
     if not use_scaling:
         # We must use .values and specify dtype to create a valid PyTorch Tensor
@@ -139,8 +142,8 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
         return train_t, test_t, None
     
     # Separate genes from theta
-    dropped_cols_train = torch.tensor(train_df[['theta_value', 'disease_type']].values, dtype=torch.float32)
-    dropped_cols_test = torch.tensor(test_df[['theta_value', 'disease_type']].values, dtype=torch.float32)
+    dropped_cols_train = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
+    dropped_cols_test = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
     
     # Scale only the genes
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
@@ -151,6 +154,9 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     return train_tensor, test_tensor, scaler
     
 def get_ready_tensors_df(train_df, test_df, use_scaling=None):
+    train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    test_df = test_df.drop(columns=['disease_type'], errors='ignore')
+
     if not use_scaling:
         # We must use .values and specify dtype to create a valid PyTorch Tensor
         train_t = torch.tensor(train_df.values, dtype=torch.float32)

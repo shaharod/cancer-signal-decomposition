@@ -17,7 +17,8 @@ def train_all_healthy():
             split_path=cfg.get_split_path("healthy", tag, is_mixed=False),
             use_scaling=scale
         )
-
+        ## here, if we had disease type col - its removed
+        
         # Add these lines to move data to the Mac GPU
         train_h = train_h.to(cfg.DEVICE)
         test_h = test_h.to(cfg.DEVICE)

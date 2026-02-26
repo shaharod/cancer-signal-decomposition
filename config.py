@@ -10,7 +10,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
-SYN_SIMPLE=False
+SYN_SIMPLE = False
 SYN_CMPLX = True
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 

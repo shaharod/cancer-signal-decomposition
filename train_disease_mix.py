@@ -22,6 +22,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             
             # 3. Concatenate 
             df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
+            df_combined['disease_type'] = df_combined['disease_type'].fillna(0)
 
             train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
             
@@ -40,9 +41,13 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 mode=mode_val
             )
 
-        train_d = train_d[:, :-1]
-        test_d = test_d[:, :-1]
+        # train_d = train_d[:, :-1]
+        # test_d = test_d[:, :-1]
         input_dim = train_d.shape[1] - 1 
+        numpy_array = train_d.detach().cpu().numpy()
+
+        # 2. Convert to a Pandas DataFrame
+        df = pd.DataFrame(numpy_array)
         # --- AUDIT PRINT ---
         print(f"Tensor Shape: {train_d.shape}") # Should be (Samples, 20007)
 
