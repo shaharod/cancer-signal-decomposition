@@ -9,7 +9,6 @@ from utils import data_utils, pca_utils
 
 def run_cross_architecture_tournament(mode_val, is_mixed):
     print("\n>>> STARTING PHASE 2: CROSS-ARCHITECTURE TOURNAMENT")
-    is_random = cfg.RANDOM_THETA_EXP
     disease_gene_path = cfg.get_disease_gene_path(mode_val)
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
@@ -20,7 +19,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             # 2. Load Disease Data (Theta > 0)
             df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.THETA_PATH, mode=mode_val) #cfg.DISEASE_GENES_PATH
             
-            # 3. Concatenate (Similar to your old 'pd.concat' logic)
+            # 3. Concatenate 
             df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
 
             train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
@@ -42,7 +41,6 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
 
         input_dim = train_d.shape[1] - 1 
         # --- AUDIT PRINT ---
-        print(f"\n[DATA AUDIT] Experiment Mode (Random={is_random})")
         print(f"Tensor Shape: {train_d.shape}") # Should be (Samples, 20007)
 
         # Show the last 5 columns of the first 5 rows

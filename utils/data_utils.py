@@ -84,12 +84,19 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
         print(f"--> Loaded split from {split_path}")
         return df.loc[splits["train_ids"]], df.loc[splits["test_ids"]]
     
+    if 'disease_type' in df.columns:
+        # e.g., "healthy", "cancer_A", "cancer_B"
+        strat_labels = df['disease_type']
+    else:
+        # Fallback: Just distinguish Healthy (theta=0) from Disease (theta>0)
+        strat_labels = (df['theta_value'] > 0).astype(int)
+
     # New Split
     train_ids, test_ids = train_test_split(
         df.index.tolist(),
         test_size=test_size,
         random_state=seed,
-        shuffle=True
+        stratify=strat_labels
     )
     
     # Save for future runs
@@ -99,6 +106,16 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
             json.dump({"train_ids": train_ids, "test_ids": test_ids}, f, indent=2)
         print(f"--> Saved split to {split_path}")
         
+    train_df = df.loc[train_ids]
+    test_df = df.loc[test_ids]
+    # 3. Validation Print
+    print("\n--- [Data Split Audit] ---")
+    for name, df in [("Train", train_df), ("Test", test_df)]:
+        h_count = (df['theta_value'] == 0).sum()
+        d_count = (df['theta_value'] > 0).sum()
+        print(f"{name} Set: {h_count} Healthy, {d_count} Disease (Ratio: {d_count/len(df):.2%})")
+
+
     return df.loc[train_ids], df.loc[test_ids]
 
 

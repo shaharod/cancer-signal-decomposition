@@ -27,7 +27,7 @@ def get_disease_gene_path(mode_val):
     if mode_val == "fixed" and not SYNTHETIC_DATA:
         raise ValueError("Still havent fixed this")
     if mode_val == "fixed":
-        return path/"disease_data_theta05.csv"
+        return path /"disease_data_theta05.csv"
 
 
 # ----- Input Data Paths ------
