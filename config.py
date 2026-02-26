@@ -10,6 +10,8 @@ DATA_PATH = PROJECT_ROOT / 'data'
 RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
+SYN_SIMPLE=False
+SYN_CMPLX = False
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
 def get_theta_mode():
@@ -31,7 +33,15 @@ def get_disease_gene_path(mode_val):
 
 
 # ----- Input Data Paths ------
-DATA_SUB = DATA_PATH / ('synthetic' if SYNTHETIC_DATA else 'real')
+DATA_SUB = DATA_PATH 
+if not SYNTHETIC_DATA:
+    DATA_SUB = DATA_SUB / 'real'
+else:
+    if SYN_SIMPLE:
+        DATA_SUB = DATA_SUB / 'synthetic_simple'
+    elif SYN_CMPLX:
+        DATA_SUB = DATA_SUB / 'synthetic_complex'
+
 
 if SYNTHETIC_DATA:
     HEALTHY_GENES_PATH = DATA_SUB / "healthy_data.csv"
