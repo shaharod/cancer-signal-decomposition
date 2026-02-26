@@ -8,7 +8,7 @@
 
 # --- Data Files ---
 # Exclude raw gene matrices and clinical data
-/data
+*.csv
 
 # --- Python Environment & Build ---
 __pycache__/
