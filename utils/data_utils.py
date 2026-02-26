@@ -48,7 +48,7 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     
     # Remove technical duplicate patient samples
     df_genes = clean_rows(df_genes)
-
+    print(f"   -> After clean_rows: {df_genes.shape}")
     if theta_path:
         df_theta = pd.read_csv(theta_path, index_col=0)
         # Align indices
@@ -77,7 +77,10 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
     """
     Reproducible split: loads from JSON or creates a new one.
     """
+    print(f"\n📂 [DEBUG] Checking Split Path: {split_path}")
+    print(f"   -> DataFrame shape arriving at split: {df.shape}")
     if split_path and os.path.exists(split_path):
+        print(f"   -> WARNING: Found an existing split file at this path!")
         with open(split_path, "r") as f:
             splits = json.load(f)
 
@@ -110,9 +113,9 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
     test_df = df.loc[test_ids]
     # 3. Validation Print
     print("\n--- [Data Split Audit] ---")
-    for name, df in [("Train", train_df), ("Test", test_df)]:
-        h_count = (df['theta_value'] == 0).sum()
-        d_count = (df['theta_value'] > 0).sum()
+    for name, df_s in [("Train", train_df), ("Test", test_df)]:
+        h_count = (df_s['theta_value'] == 0).sum()
+        d_count = (df_s['theta_value'] > 0).sum()
         print(f"{name} Set: {h_count} Healthy, {d_count} Disease (Ratio: {d_count/len(df):.2%})")
 
 
