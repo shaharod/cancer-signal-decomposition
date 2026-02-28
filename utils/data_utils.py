@@ -51,11 +51,6 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     df_genes = clean_rows(df_genes)
     print(f"   -> After clean_rows: {df_genes.shape}")
     if theta_path:
-        df_theta = pd.read_csv(theta_path, index_col=0)
-        # Align indices
-        common_idx = df_genes.index.intersection(df_theta.index)
-        df_genes = df_genes.loc[common_idx]
-        df_theta = df_theta.loc[common_idx]
         # Combined DF with theta as last column
         # df_genes['theta_value'] = df_theta.iloc[:, 0]
         if mode == 'random':
@@ -66,6 +61,11 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
             df_genes['theta_value'] = 0.5 # Every sample is a "perfect mix"
         else:
             print("real thetas are used")
+            df_theta = pd.read_csv(theta_path, index_col=0)
+            # Align indices
+            common_idx = df_genes.index.intersection(df_theta.index)
+            df_genes = df_genes.loc[common_idx]
+            df_theta = df_theta.loc[common_idx]
             df_genes['theta_value'] = df_theta.iloc[:, 0] # True values
 
     else:
@@ -179,12 +179,12 @@ def fix_df_data(scale_bool, mode, is_mixed):
     tag = "scaled" if scale_bool else "unscaled"
     
     # 1. Load the core Disease Data
-    df_d = prepare_and_align_data(cfg.DISEASE_GENES_PATH, theta_path=cfg.THETA_PATH, mode=mode)
+    df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.THETA_PATH, mode=mode)
     
     if is_mixed:
         # Scenario A: Mixed Dataset (Healthy + Disease)
         df_h = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
-        df_target = pd.concat([df_h, df_d]).sample(frac=1, random_state=42)
+        df_target = pd.concat([df_h, df_d]) #.sample(frac=1, random_state=42)
     else:
         # Scenario B: Disease Samples Only
         df_target = df_d

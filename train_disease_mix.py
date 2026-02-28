@@ -21,7 +21,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.THETA_PATH, mode=mode_val) #cfg.DISEASE_GENES_PATH
             
             # 3. Concatenate 
-            df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
+            df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
             df_combined['disease_type'] = df_combined['disease_type'].fillna(0)
 
             train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong

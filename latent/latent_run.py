@@ -45,8 +45,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     """
     print(f"\n>>> STARTING LATENT ANALYSIS | Phase: {phase} | Mixed: {is_mixed} | Mode: {mode}")
     
-    # Tournament winners for visualization
-    # You can add more from cfg.MODEL_TYPES if you want a full grid
+    # Tournament for visualization
     disease_models = ["mix_H-pca_D-ae_basic", "mix_H-pca_D-ae_layered", "mix_H-pca_D-pca"]
     healthy_models = ["ae_basic", "ae_layered", "pca"]
     

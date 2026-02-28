@@ -33,8 +33,11 @@ def load_reconstruction_data(phase, mode):
     print(f"truth_file: {truth_file}")
     print(f"mix file: {mix_file}")
     # 2. Validation
-    if not mix_file.exists() or not truth_file.exists():
-        print(f"⚠️ Warning: Reconstruction data not found:\n {mix_file}\n {truth_file}")
+    if not mix_file.exists():
+        print(f"⚠️ Warning: Reconstruction data not found:\n {mix_file}")
+        return None, None
+    if not truth_file.exists():
+        print(f"⚠️ Warning: truth file data not found:\n {truth_file}")
         return None, None
         
     # Load & Transpose (Genes should be columns for the model)
