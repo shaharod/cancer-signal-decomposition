@@ -15,7 +15,9 @@ def train_all_healthy():
         train_h, test_h, scaler = data_utils.get_ready_tensors(
             cfg.HEALTHY_GENES_PATH, 
             split_path=cfg.get_split_path("healthy", tag, is_mixed=False),
-            use_scaling=scale
+            use_scaling=scale,
+            phase="healthy",
+            is_mixed=False
         )
         ## here, if we had disease type col - its removed
         

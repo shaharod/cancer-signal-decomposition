@@ -11,7 +11,7 @@ RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = True
 SYNTHETIC_DATA = True
 SYN_SIMPLE = False
-SYN_CMPLX = True
+SYN_CMPLX = not SYN_SIMPLE
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
 def get_theta_mode():
@@ -46,7 +46,7 @@ else:
 if SYNTHETIC_DATA:
     HEALTHY_GENES_PATH = DATA_SUB / "healthy_data.csv"
     # DISEASE_GENES_PATH = DATA_SUB / ("disease_data_theta05.csv" if FIXED_THETA_EXP else "disease_data_uniform_theta.csv")
-    THETA_PATH         = DATA_SUB / "syn_theta_values.csv"
+    THETA_PATH         = DATA_SUB / "theta_values.csv"
 else:
     HEALTHY_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_healthy.csv"
     # DISEASE_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_crc.csv"

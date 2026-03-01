@@ -250,6 +250,7 @@ def analyze_d_portion_recon_new(labels_dict, scale_bool, save_path, mode):
     _, true_healthy = load_reconstruction_data('healthy', mode)
     if mix_disease is None: return
     tag = "scaled" if scale_bool else "unscaled"
+
     input_size = mix_disease.shape[1]
     print(f"input size {input_size}") 
     gene_size = input_size
@@ -548,7 +549,124 @@ def analyze_disease_portion_reconstruction(labels_dict, scale_bool, save_path, m
         plt.close(fig_scatter)
 
 
+def plot_total_reconstruction_scatter(labels_dict, scale_bool, save_path, mode, is_mixed, disease_map=None, color_map=None):
+    """
+    Universal Scatter Plot: Input vs Total Output.
+    Automatically maps numeric disease types to readable legend labels.
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    
+    # --- 💡 THE DICTIONARY ---
+    # Default mapping if don't pass one in the function call
+    if disease_map is None:
+        disease_map = {
+            0: "Healthy", 
+            1: "Disease 1", 
+            2: "Disease 2"
+        }
+    if color_map is None:
+        color_map = {
+            "Healthy": "#2ecc71",   # Emerald Green
+            "Disease 1": "#e74c3c", # Red
+            "Disease 2": "#9b59b6"  # Purple
+        }
+    # 1. Load the mixed dataset
+    train_df, test_df = du.fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=is_mixed)
+    
+    # 2. Safely separate metadata from tensors
+    metadata_cols = ['theta_value']
+    if 'disease_type' in test_df.columns:
+        metadata_cols.append('disease_type')
+        
+    test_genes = test_df.drop(columns=metadata_cols, errors='ignore')
+    gene_size = test_genes.shape[1]
+    
+    # Create strict [Genes + Theta] tensor for the model
+    test_no_theta_t = torch.tensor(test_genes.values, dtype=torch.float32)
+    test_theta_t = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    test_w_theta_t = torch.cat([test_no_theta_t, test_theta_t], dim=1)
 
+    #  MAP THE NUMBERS TO NAMES FOR THE LEGEND
+    if 'disease_type' in test_df.columns:
+        # This instantly translates [0, 1, 2] -> ["Healthy", "Disease 1", "Disease 2"]
+        # If a number isn't in the dict (e.g., 3), it safely leaves it as "3"
+        mapped_series = test_df['disease_type'].map(disease_map).fillna(test_df['disease_type'].astype(str))
+        sample_labels = mapped_series.values
+    else:
+        # Fallback if the column doesn't exist
+        sample_labels = np.where(test_df['theta_value'] > 0, disease_map.get(1, "Disease"), disease_map.get(0, "Healthy"))
+
+    # Repeat labels so every single gene point knows what patient it came from
+    flat_sample_labels = np.repeat(sample_labels, gene_size)
+
+    # 4. Loop through models and plot (The rest of the logic remains exactly the same!)
+    for base_name, models in labels_dict.items():
+        n_rows = len(cfg.ENCODING_SIZES)
+        n_cols = len(models)
+        
+        fig_scatter, axes_scatter = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6 * n_rows), squeeze=False)
+        fig_scatter.suptitle(f"Total Signal Reconstruction (Phase: DISEASE MIX | Base: {base_name.upper()})\n"
+                             f"Input vs. Total Output (theta: {mode})", 
+                             fontsize=20, fontweight='bold', y=0.98)
+
+        for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
+            for col_idx, (model_label, folder_tag) in enumerate(models.items()):
+                ax_scatter = axes_scatter[row_idx, col_idx]
+                try:
+                    # Run Inference
+                    recon_mix, _, _, _ = mu.create_load_mix_model(
+                        folder_tag=folder_tag, test_set=test_w_theta_t, 
+                        gene_size=gene_size, enc=enc, scale_tag=tag
+                    )
+                    
+                    if recon_mix is None:
+                        print(f"Where the hell is my reconstruced data????? with folder tag:\n {folder_tag}")
+                        continue    
+                    
+                    x_vals = test_no_theta_t.flatten().numpy()
+                    y_vals = recon_mix.detach().cpu().numpy().flatten()
+                    
+                    # Scatter Plot (Seaborn will automatically use your mapped dictionary strings!)
+                    sns.scatterplot(
+                        x=x_vals, y=y_vals, s=1, alpha=0.4, 
+                        hue=flat_sample_labels,
+                        ax=ax_scatter,
+                        edgecolors='none',
+                    palette=color_map
+
+                    )
+
+                    # Identity Line
+                    max_val = max(x_vals.max(), y_vals.max())
+                    min_val = min(x_vals.min(), y_vals.min())
+                    ax_scatter.plot([min_val, max_val], [min_val, max_val], color='#e74c3c', linestyle='--', linewidth=1, label='Identity')
+                    
+                    # Metrics
+                    r2 = r2_score(x_vals, y_vals)
+                    pearson_r, _ = stats.pearsonr(x_vals, y_vals)
+                    text_str = f'$R^2 = {r2:.3f}$\nPearson $r = {pearson_r:.3f}$'
+                    ax_scatter.text(0.05, 0.95, text_str, transform=ax_scatter.transAxes, 
+                                    fontsize=10, verticalalignment='top', 
+                                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+
+                    # Formatting
+                    ax_scatter.set_title(f"{model_label} (Enc {enc})")
+                    if col_idx == 0: ax_scatter.set_ylabel("Total Recon (H+D)")
+                    if row_idx == n_rows - 1: ax_scatter.set_xlabel("Original Input")
+                    ax_scatter.legend(fontsize='x-small', title_fontsize='8', loc='lower right')
+
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    ax_scatter.text(0.5, 0.5, "Inference Error", ha='center', color='red')
+        
+        # Save Figure
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}"
+        os.makedirs(out_folder, exist_ok=True)
+        
+        fig_scatter.savefig(out_folder / f"{save_path}_{tag}_scatter.png", dpi=150)
+        plt.close(fig_scatter)
 
 def interpret_disease_mix(phase='disease', mode="true"):
 
@@ -557,7 +675,7 @@ def interpret_disease_mix(phase='disease', mode="true"):
     # theta_values = pd.to_numeric(theta_df.iloc[:, -1], errors='coerce').dropna().values
     # input_df, truth_df = load_reconstruction_data(phase)
     # all possible combinations of healthy baselines with disease
-    disease_mix_labels = {
+    labels_dict = {
         'PCA':
         {   "pca": "mix_H-pca_D-pca",
             "ae_basic": "mix_H-pca_D-ae_basic",
@@ -567,13 +685,32 @@ def interpret_disease_mix(phase='disease', mode="true"):
     }
 
 
+    ######### NOTE: these functions dont work with the more complex data ###############
     ##unscaled data reconstructions
+    # analyze_d_portion_recon_new(labels_dict=labels_dict, scale_bool=False, save_path="analyze_recon_allSamples_dif", mode=mode)
+    # # print("################### DISEASE PORTION RECON FUNCTION ###################")
+    # analyze_disease_portion_reconstruction(labels_dict=labels_dict, scale_bool=False, save_path="analyze_recon_dSamplesOnly", mode=mode)
 
-    analyze_d_portion_recon_new(disease_mix_labels, scale_bool=False, save_path="analyze_recon_allSamples_dif", mode=mode)
-    # print("################### DISEASE PORTION RECON FUNCTION ###################")
-    analyze_disease_portion_reconstruction(disease_mix_labels, scale_bool=False, save_path="analyze_recon_dSamplesOnly", mode=mode)
+    ######################################################################################
 
-    all_results = []
+    plot_total_reconstruction_scatter(
+    labels_dict=labels_dict, 
+    scale_bool=False, 
+    save_path="allSamples", 
+    mode=mode, 
+    is_mixed=True,
+    disease_map=None  # <-- Pass it right here!
+)    
+    plot_total_reconstruction_scatter(
+    labels_dict=labels_dict, 
+    scale_bool=False, 
+    save_path="dOnly", 
+    mode=mode, 
+    is_mixed=False,
+    disease_map=None  # <-- Pass it right here!
+)
+
+    # all_results = []
     # for base_label, models in disease_mix_labels.items():
     #     plot_consolidated_heatmaps(base_label, models)
     #     h_arch = arch_map[base_label]

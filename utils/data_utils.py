@@ -8,7 +8,7 @@ import json
 from sklearn.preprocessing import StandardScaler
 import config as cfg
 
-def fit_and_scale(train_df, test_df):
+def fit_and_scale2(train_df, test_df):
     """Scaler fitted only on training genes."""
     scaler = StandardScaler()
     # Remove theta and disease type if there is before scaling
@@ -17,6 +17,77 @@ def fit_and_scale(train_df, test_df):
     test_genes = test_df.drop(columns=['theta_value'])
     
     train_scaled = scaler.fit_transform(train_genes)
+    test_scaled = scaler.transform(test_genes)
+    
+    return (
+        torch.tensor(train_scaled, dtype=torch.float32),
+        torch.tensor(test_scaled, dtype=torch.float32),
+        scaler
+    )
+
+def get_scaler_path(phase, is_mixed=False, theta=""):
+    """
+    Forces the scaler to be shared across all theta-experiments 
+    within the same base phase.
+    """
+    
+    # 1. Get the base directory for the phase (Healthy, Mix, or Mix_All)
+    if phase == "healthy":
+        base_dir = cfg.HEALTHY_OUT_DIR
+    elif phase == "disease":
+        # Anchors to 'disease_mix_all' or 'disease_mix', ignoring sub-theta folders
+        base_dir = cfg.BASE_EXP_DIR / 'disease_mix_all' if is_mixed else cfg.BASE_EXP_DIR / 'disease_mix'
+        if theta == "fixed":
+            base_dir = base_dir / "disease_mix_fixed_0.5"
+        elif theta == "true":
+            theta_type = 'uniform' if cfg.SYNTHETIC_DATA else 'true'
+            base_dir = base_dir / f"disease_mix_{theta_type}_theta"
+        else:
+            raise ValueError()
+    else:
+        raise ValueError(f"Unknown phase: {phase}")
+
+    # 2. Return the path inside the 'scaled/unscaled' root of that phase
+    path = base_dir / "scaler.joblib"
+    
+    # Ensure the directory exists so we can save/load there
+    os.makedirs(path.parent, exist_ok=True)
+    return path
+
+
+def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
+    """
+    Smarter Scaling: Anchors the scaler to the phase root to ensure 
+    consistency across different theta-experiments.
+    """
+    # 1. Resolve the GLOBAL scaler path for this phase/scale combo
+    # Use the logic we discussed: anchors to the root, not the sub-theta folder
+    scaler_path = get_scaler_path(phase, is_mixed, theta)
+    
+    # 2. Prepare Gene-only dataframes (excluding theta_value)
+    # We must drop theta so the scaler doesn't treat it as a gene feature
+    train_genes = train_df.drop(columns=['theta_value'])
+    test_genes = test_df.drop(columns=['theta_value'])
+    
+    scaler = None
+
+    # 3. Check for existing global scaler
+    if scaler_path.exists():
+        print(f"✅ Loading GLOBAL scaler for {phase} (scaled): {scaler_path}")
+        scaler = joblib.load(scaler_path)
+    else:
+        print(f"🚀 No scaler found for {phase}. Fitting NEW global scaler...")
+        scaler = StandardScaler()
+        # Only fit on training genes to prevent data leakage from the test set
+        scaler.fit(train_genes)
+        
+        # Save it to the phase root so other theta experiments can use it
+        os.makedirs(scaler_path.parent, exist_ok=True)
+        joblib.dump(scaler, scaler_path)
+        print(f"💾 Global scaler saved to: {scaler_path}")
+
+    # 4. Transform data
+    train_scaled = scaler.transform(train_genes)
     test_scaled = scaler.transform(test_genes)
     
     return (
@@ -123,7 +194,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
     return df.loc[train_ids], df.loc[test_ids]
 
 
-def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=None, mode="true"):
+def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=None, mode="true", phase="healthy", is_mixed=False, theta=""):
     """
     Final Pipeline: Align -> Split -> Scale -> Tensor.
     Returns: (train_tensor, test_tensor, scaler)
@@ -146,14 +217,14 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     dropped_cols_test = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
     
     # Scale only the genes
-    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
+    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
     
     # Combine back to [Genes | Theta]
     train_tensor = torch.cat([train_genes_scaled, dropped_cols_train], dim=1)
     test_tensor = torch.cat([test_genes_scaled, dropped_cols_test], dim=1)
     return train_tensor, test_tensor, scaler
     
-def get_ready_tensors_df(train_df, test_df, use_scaling=None):
+def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", is_mixed=False, theta=""):
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
     test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
@@ -168,7 +239,7 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None):
     test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
     
     # Scale only the genes
-    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df)
+    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
     
     # Combine back to [Genes | Theta]
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
@@ -198,6 +269,9 @@ def fix_df_data(scale_bool, mode, is_mixed):
     
     # 3. Get the train/test split
     train_df, test_df = get_split_data(df_target, split_path=tournament_split_path)
+
+    train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    test_df = test_df.drop(columns=['disease_type'], errors='ignore')
     
     return train_df, test_df
 

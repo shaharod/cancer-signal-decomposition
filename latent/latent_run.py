@@ -22,11 +22,7 @@ Key Logic:
 
 import sys
 from pathlib import Path
-import torch
-import config as cfg
-import latent_utils as lu
-import utils.data_utils as du
-
+print(sys.executable)
 # Get the path of the current file's directory
 current_file = Path(__file__).resolve()
 
@@ -36,6 +32,10 @@ project_root = current_file.parents[1]
 
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
+import torch
+import config as cfg
+import latent_utils as lu
+import utils.data_utils as du
 
 
 
@@ -56,7 +56,10 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
         
         # Load the specific Test Set and Metadata (Theta, etc.)
         # ensures we color points by the correct sample IDs
-        _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
+        if phase == "disease":
+            _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
+        elif phase == "healthy":
+            pass
         test_t = torch.Tensor(test_df.values).float()
         
         # Extract Latents
@@ -117,19 +120,19 @@ if __name__ == '__main__':
     run_comprehensive_latent_analysis("healthy", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
-    for mode in ["true", "fixed"]:
-        # Update config flags to match experiment
-        if mode == "true":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = False
-        elif mode == "fixed":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = True
+    # for mode in ["true", "fixed"]:
+    #     # Update config flags to match experiment
+    #     if mode == "true":
+    #         cfg.RANDOM_THETA_EXP = False
+    #         cfg.FIXED_THETA_EXP = False
+    #     elif mode == "fixed":
+    #         cfg.RANDOM_THETA_EXP = False
+    #         cfg.FIXED_THETA_EXP = True
         
-        # Analyze Disease Models trained with ALL samples (H + D)
-        run_comprehensive_latent_analysis("disease", is_mixed=True, mode=mode)
+    #     # Analyze Disease Models trained with ALL samples (H + D)
+    #     run_comprehensive_latent_analysis("disease", is_mixed=True, mode=mode)
         
-        # Analyze Disease Models trained with Disease Samples Only
-        run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
+    #     # Analyze Disease Models trained with Disease Samples Only
+    #     run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
 
 
