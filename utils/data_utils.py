@@ -31,11 +31,11 @@ def get_scaler_path(phase, is_mixed=False, theta=""):
     within the same base phase.
     """
     
-    # 1. Get the base directory for the phase (Healthy, Mix, or Mix_All)
+    # Get the base directory for the phase (Healthy, Mix, or Mix_All)
     if phase == "healthy":
         base_dir = cfg.HEALTHY_OUT_DIR
     elif phase == "disease":
-        # Anchors to 'disease_mix_all' or 'disease_mix', ignoring sub-theta folders
+        # Anchors to theta path so we match to data currently used
         base_dir = cfg.BASE_EXP_DIR / 'disease_mix_all' if is_mixed else cfg.BASE_EXP_DIR / 'disease_mix'
         if theta == "fixed":
             base_dir = base_dir / "disease_mix_fixed_0.5"
@@ -47,7 +47,7 @@ def get_scaler_path(phase, is_mixed=False, theta=""):
     else:
         raise ValueError(f"Unknown phase: {phase}")
 
-    # 2. Return the path inside the 'scaled/unscaled' root of that phase
+    # Return the path inside the 'scaled/unscaled' root of that phase
     path = base_dir / "scaler.joblib"
     
     # Ensure the directory exists so we can save/load there
@@ -60,18 +60,15 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
     Smarter Scaling: Anchors the scaler to the phase root to ensure 
     consistency across different theta-experiments.
     """
-    # 1. Resolve the GLOBAL scaler path for this phase/scale combo
-    # Use the logic we discussed: anchors to the root, not the sub-theta folder
     scaler_path = get_scaler_path(phase, is_mixed, theta)
     
-    # 2. Prepare Gene-only dataframes (excluding theta_value)
     # We must drop theta so the scaler doesn't treat it as a gene feature
     train_genes = train_df.drop(columns=['theta_value'])
     test_genes = test_df.drop(columns=['theta_value'])
     
     scaler = None
 
-    # 3. Check for existing global scaler
+    # Check for existing global scaler
     if scaler_path.exists():
         print(f"✅ Loading GLOBAL scaler for {phase} (scaled): {scaler_path}")
         scaler = joblib.load(scaler_path)
@@ -86,7 +83,7 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
         joblib.dump(scaler, scaler_path)
         print(f"💾 Global scaler saved to: {scaler_path}")
 
-    # 4. Transform data
+    # Transform data
     train_scaled = scaler.transform(train_genes)
     test_scaled = scaler.transform(test_genes)
     
@@ -152,7 +149,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
     print(f"\n📂 [DEBUG] Checking Split Path: {split_path}")
     print(f"   -> DataFrame shape arriving at split: {df.shape}")
     if split_path and os.path.exists(split_path):
-        print(f"   -> WARNING: Found an existing split file at this path!")
+        print(f"   -> NOTE: Found an existing split file at this path!")
         with open(split_path, "r") as f:
             splits = json.load(f)
 
@@ -160,7 +157,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
         return df.loc[splits["train_ids"]], df.loc[splits["test_ids"]]
     
     if 'disease_type' in df.columns:
-        # e.g., "healthy", "cancer_A", "cancer_B"
+        # like "healthy", "cancer_A", "cancer_B". we have in numbers 0 1 2
         strat_labels = df['disease_type']
     else:
         # Fallback: Just distinguish Healthy (theta=0) from Disease (theta>0)
@@ -183,7 +180,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
         
     train_df = df.loc[train_ids]
     test_df = df.loc[test_ids]
-    # 3. Validation Print
+    # Validation Print
     print("\n--- [Data Split Audit] ---")
     for name, df_s in [("Train", train_df), ("Test", test_df)]:
         h_count = (df_s['theta_value'] == 0).sum()
