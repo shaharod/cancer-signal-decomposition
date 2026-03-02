@@ -92,7 +92,11 @@ PLOTS_SUBFOLDER = 'plots'
 
 # base
 BASE_EXP_DIR = PROJECT_ROOT / 'outputs' / ('synthetic_experiments' if SYNTHETIC_DATA else 'real_experiments')
+if SYNTHETIC_DATA:
+    suffix = "_simple" if SYN_SIMPLE else "_cmplx"
 
+    BASE_EXP_DIR = BASE_EXP_DIR.with_name(BASE_EXP_DIR.name + suffix)
+    
 # sub-folders types
 HEALTHY_OUT_DIR = BASE_EXP_DIR / 'healthy'
 DISEASE_OUT_DIR = BASE_EXP_DIR / 'disease_mix'
