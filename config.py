@@ -63,7 +63,13 @@ EPOCHS_NUM     = 300
 BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
-ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
+
+def choose_enc():
+    if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
+        return [16, 32, 64, 128]
+    else:
+        return [8, 16] 
+ENCODING_SIZES = choose_enc() # [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
 
 
 # Layered AE architecture settings
