@@ -117,7 +117,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 if __name__ == '__main__':
     
     # Analyze Healthy Baselines (Phase 1)
-    run_comprehensive_latent_analysis("healthy", is_mixed=False, mode="true")
+    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
     # for mode in ["true", "fixed"]:

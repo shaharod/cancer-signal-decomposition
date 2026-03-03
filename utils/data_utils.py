@@ -244,6 +244,9 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", i
     return train_tensor, test_tensor, scaler
 
 def fix_df_data(scale_bool, mode, is_mixed):
+    """
+    function to deal with disease data, it returns split data with theta, without disease type
+    """
     tag = "scaled" if scale_bool else "unscaled"
     
     # 1. Load the core Disease Data
