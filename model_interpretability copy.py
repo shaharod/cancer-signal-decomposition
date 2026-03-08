@@ -230,17 +230,20 @@ def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
                     
     return cache
 
-def analyze_total_reconstruction(labels_dict, inference_cache, test_df, test_w_type, scale_bool, save_path, mode, is_simple=False, is_mixed=False):
+def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, test_n_theta, gene_size, scale_bool, save_path, mode, is_simple=False, is_mixed=False):
     """
     Evaluates the Total Mix Reconstruction (recon_mix) using pre-computed inference cache.
     Colors the complex data dynamically based on available classes.
+    test_df - has genes with theta column
+    test_w_type - has gene with theta and disease type
     """
     tag = "scaled" if scale_bool else "unscaled"
-    input_size = test_df.shape[1]
-    gene_size = input_size - 1
+    # input_size = test_df.shape[1/\]
+
+    # gene_size = input_size - 1
     
-    # test_df has theta isolated, so test_no_theta_t is purely genes
-    test_no_theta_t = torch.Tensor(test_df.drop(columns=['theta_value'], errors='ignore').values).float()
+    # # test_df has theta isolated, so test_no_theta_t is purely genes
+    # test_no_theta_t = torch.Tensor(test_df.drop(columns=['theta_value', 'disease_type'], errors='ignore').values).float()
 
     # Plotting Loop
     for base_name, models in labels_dict.items():
@@ -266,7 +269,7 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df, test_w_t
                     recon_mix = model_outputs['mix']
                         
                     # Flatten the data for scatter
-                    flat_input = test_no_theta_t.flatten().numpy()
+                    flat_input = test_n_theta.flatten().numpy()
                     flat_recon = recon_mix.detach().cpu().numpy().flatten()
                     
                     # Route to correct plot
@@ -281,10 +284,10 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df, test_w_t
                             "Disease": "#d43220"          # Fallback Red
                         }
                         
-                        if 'disease_type' in test_w_type.columns:
-                            sample_labels = test_w_type['disease_type'].map(disease_map).fillna("Unknown")
+                        if 'disease_type' in test_df_full.columns:
+                            sample_labels = test_df_full['disease_type'].map(disease_map).fillna("Unknown")
                         else:
-                            sample_labels = np.where(test_df['theta_value'] == 0, "Healthy", "Disease")
+                            sample_labels = np.where(test_df_full['theta_value'] == 0, "Healthy", "Disease")
                             sample_labels = pd.Series(sample_labels)
                             
                         flat_labels = np.repeat(sample_labels.values, gene_size)
@@ -319,14 +322,14 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df, test_w_t
         plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}_total_recon_scatter.png", dpi=150)
         plt.close(fig)
 
-def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache, test_df, test_w_type, true_disease, scale_bool, save_path, mode, is_simple=False):
+def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache, test_df_full, true_disease_input, scale_bool, gene_size, save_path, mode, is_simple=False):
     """
     Evaluates Disease Branch Reconstruction using pre-computed inference cache.
     Dynamically switches between Boxplots and Scatter plots based on is_simple.
     """
     tag = "scaled" if scale_bool else "unscaled"
-    input_size = test_df.shape[1]
-    gene_size = input_size - 1
+    # input_size = test_df_full.shape[1]
+    # gene_size = input_size - 1
     _, true_healthy = load_reconstruction_data('healthy', mode)
     
     # Plotting Loop
@@ -344,7 +347,6 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
             for col_idx, (model_label, folder_tag) in enumerate(models.items()):
                 ax = axes[row_idx, col_idx]
                 try:
-                    # 🚀 INSTANT CACHE LOOKUP
                     model_outputs = inference_cache[base_name][enc].get(model_label)
                     
                     if model_outputs is None or model_outputs['disease'] is None:
@@ -354,30 +356,40 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
                     recon_d = model_outputs['disease']
                         
                     # Extract Data
-                    test_truth_disease = true_disease.reindex(test_df.index)
-                    flat_input = test_truth_disease.values.flatten()
+                    test_truth_d = true_disease_input.reindex(test_df_full.index)
+                    test_truth_h = true_healthy.reindex(test_df_full.index)
+                    benchmark_truth = test_truth_d.fillna(test_truth_h)
+                    flat_input = benchmark_truth.values.flatten()
                     flat_recon = recon_d.detach().cpu().numpy().flatten()
                     
                     # Route to the correct plot type
                     if is_simple:
                         _plot_simple_boxplot(
                             ax=ax, 
-                            test_truth_disease=test_truth_disease, 
-                            test_truth_healthy=true_healthy.reindex(test_df.index).values, 
+                            test_truth_disease=test_truth_d, 
+                            test_truth_healthy=true_healthy.reindex(test_df_full.index).values, 
                             recon_h=model_outputs['healthy'], 
                             recon_d=recon_d, 
-                            thetas=test_df['theta_value'], 
+                            thetas=test_df_full['theta_value'], 
                             model_label=model_label, 
                             enc=enc
                         )
                     else:
-                        color_map = {"Disease A (CRC)": "#d43220", "Disease B (SCLC)": "#870fb6"}
-                        disease_map = {1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+                        disease_map = {0: "Healthy", 1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+                        color_map = {
+                            "Healthy": "#2ecc71",         # Green
+                            "Disease A (CRC)": "#d43220", # Red
+                            "Disease B (SCLC)": "#870fb6",# Purple
+                            "Disease": "#d43220"          # Fallback Red
+                        }
                         
-                        if 'disease_type' in test_w_type.columns:
-                            sample_labels = test_w_type['disease_type'].map(disease_map).fillna("Unknown")
+                        # color_map = {"Disease A (CRC)": "#d43220", "Disease B (SCLC)": "#870fb6"}
+                        # disease_map = {1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+                        
+                        if 'disease_type' in test_df_full.columns:
+                            sample_labels = test_df_full['disease_type'].map(disease_map).fillna("Unknown")
                         else:
-                            sample_labels = pd.Series(["Disease"] * len(test_df))
+                            sample_labels = pd.Series(["Disease"] * len(test_df_full))
                             color_map = {"Disease": "#8e44ad"} 
                             
                         flat_labels = np.repeat(sample_labels.values, gene_size)
@@ -418,56 +430,57 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # ==========================================
     # 1. LOAD AND PREP DATA (Happens exactly once)
     # ==========================================
-    mix_disease, true_disease = load_reconstruction_data('disease', mode) 
-    theta = pd.read_csv(cfg.THETA_PATH, index_col=0)
-    
-    if mode == 'fixed': 
-        mix_disease['theta_value'] = 0.5
-    elif mode == 'true':
-        mix_disease['theta_value'] = theta.iloc[:, 0]
-    else:
-        raise ValueError("Unknown theta mode!")
-        
     tag = "scaled" if scale_bool else "unscaled"
+
+    _, true_disease = load_reconstruction_data('disease', mode) 
+   
+    train_t, test_t, _, info = du.load_and_prep_tensors(
+    phase="disease", mode=mode, scale_bool=scale_bool, is_mixed=is_mixed
+    )
+    test_df_full = info['test_df_full'].fillna(value=0.0)      # Contains [Genes | Theta | Type]
+
+    gene_size = test_t.shape[1] - 1
+    # test_w_theta_t = torch.Tensor(test_t.values).float()
     
-    tournament_split_path = cfg.get_split_path("disease", tag, False)
-    _, test_w_type = du.get_split_data(mix_disease, split_path=tournament_split_path)
-    _, test_df = du.fix_df_data(scale_bool=scale_bool, mode=mode, is_mixed=is_mixed)
-    
-    input_size = test_df.shape[1]
-    gene_size = input_size - 1
-    test_w_theta_t = torch.Tensor(test_df.values).float()
-    
-    print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_df.shape[0]}")
+    print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_t.shape[0]}")
 
     # ==========================================
     # 2. GENERATE INFERENCE CACHE 
     # ==========================================
     print("🧠 Running Model Inference Cache...")
-    inference_cache = generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag)
-
+    inference_cache = generate_inference_cache(labels_dict, test_t, gene_size, tag)
+    metadata_cols = ['theta_value', 'disease_type']
+    test_genes_df = test_df_full.drop(columns=metadata_cols, errors='ignore')
+    
+    actual_gene_size = test_genes_df.shape[1]
+    test_no_theta_t = torch.Tensor(test_genes_df.values).float()
+    if gene_size != gene_size:
+        raise ValueError(f"why arent they the same size?: {gene_size} vs {actual_gene_size}")
     # ==========================================
-    # 3. GENERATE VISUALIZATIONS (Lightning Fast)
+    # 3. GENERATE VISUALIZATIONS 
     # ==========================================
     print("🎨 Drawing Disease Branch Scatter Plots...")
     analyze_disease_portion_reconstruction_scatter(
         labels_dict=labels_dict, 
         inference_cache=inference_cache, 
-        test_df=test_df, 
-        test_w_type=test_w_type, 
-        true_disease=true_disease, 
+        test_df_full=test_df_full, 
+        true_disease_input=true_disease, 
         scale_bool=scale_bool, 
+        gene_size=actual_gene_size,
         save_path=save_path+"_disease", 
         mode=mode, 
         is_simple=is_simple
+        # ,
+        # is_mixed=is_mixed
     )
     
     print("🎨 Drawing Total Mix Scatter Plots...")
     analyze_total_reconstruction(
         labels_dict=labels_dict, 
         inference_cache=inference_cache, 
-        test_df=test_df, 
-        test_w_type=test_w_type, 
+        test_df_full=test_df_full, 
+        test_n_theta=test_no_theta_t,
+        gene_size=actual_gene_size, 
         scale_bool=scale_bool, 
         save_path=save_path+"_total", 
         mode=mode, 
@@ -487,15 +500,19 @@ def interpret_disease_mix(phase='disease', mode="true"):
             
         }
     }
-    run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
-                                              scale_bool=UNSCALED, save_path=f"analyze_recon_dOnly", 
-                                              mode=mode, is_mixed=NOT_MIXED)
-
+    print("################# running with mix") 
     run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
                                               scale_bool=UNSCALED, save_path="analyze_recon_mixed", 
                                               mode=mode, is_mixed=MIXED)
+    print("############ running with no mix") 
+
+    run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
+                                              scale_bool=UNSCALED, save_path=f"analyze_recon_dOnly", 
+                                         mode=mode, is_mixed=NOT_MIXED)
 
 
+
+    print("end of run")
 if __name__ == '__main__':
 
     # TODO: fix logic, maybe from command lines arguments or something

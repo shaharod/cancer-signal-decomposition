@@ -142,6 +142,64 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
         
     return df_genes
 
+def load_and_prep_tensors(phase, mode, scale_bool, is_mixed, theta_tag=""):
+    """
+    Unified Pipeline: 
+    1. Loads (Healthy/Disease/Mixed) 
+    2. Aligns with Theta (Mode: true/fixed/random)
+    3. Splits (Tournament Paths)
+    4. Scales (Global Scaler check)
+    5. Tensorizes
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    
+    # 1. Load Core Data
+    if phase == "healthy":
+        # Healthy only case
+        df_target = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+    else:
+        # Disease case (might be mixed with healthy)
+        df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.THETA_PATH, mode=mode)
+        
+        if is_mixed:
+            df_h = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+            df_target = pd.concat([df_h, df_d])
+        else:
+            df_target = df_d
+
+    # 2. Handle Splits
+    split_path = cfg.get_split_path(phase=phase, scale_tag=tag, is_mixed=is_mixed)
+    train_df, test_df = get_split_data(df_target, split_path=split_path)
+    info_dict = {
+        'test_df_full': test_df.copy(), # Keep everything (genes, theta, type)
+        'train_df_full': train_df.copy()
+    }
+    # 3. Clean Metadata (Drop disease_type but KEEP theta_value)
+    train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    test_df = test_df.drop(columns=['disease_type'], errors='ignore')
+
+    # 4. Handle Scaling & Tensorization
+    if not scale_bool:
+        # Straight to tensors
+        train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        test_t = torch.tensor(test_df.values, dtype=torch.float32)
+        return train_t, test_t, None, info_dict
+
+    # Separate genes from theta for scaling
+    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
+    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    
+    # Scale only the genes via the smart fit_and_scale
+    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(
+        train_df, test_df, phase, is_mixed, theta_tag
+    )
+    
+    # 5. Recombine [Genes | Theta]
+    train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
+    
+    return train_tensor, test_tensor, scaler, info_dict
+
 def get_split_data(df, split_path, test_size=0.2, seed=42):
     """
     Reproducible split: loads from JSON or creates a new one.
