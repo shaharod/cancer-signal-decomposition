@@ -22,14 +22,14 @@ def get_standalone_latents(model_type, input_size, enc_sizes, scale_bool, test_s
     latents = {}
     for enc in enc_sizes:
         _, z = mu.create_load_standalone_model(phase=phase, m_type=model_type, enc=enc, scale_bool=scale_bool, input_size=input_size, test_t=test_set)
-        latents[f"{model_type}_enc:{enc}"] = z
+        latents[f"{model_type}_enc{enc}"] = z
     return latents
 
 def get_mix_latents(mix_type, input_size, enc_sizes, scale_tag, is_mixed, test_t):
     latents = {}
     for enc in enc_sizes:
         _, _, _, z = mu.create_load_mix_model(folder_tag=mix_type, test_set=test_t, gene_size=input_size, enc=enc, scale_tag=scale_tag)
-        latents[f"{mix_type}_enc:{enc}"] = z
+        latents[f"{mix_type}_enc{enc}"] = z
         ## NOTE: the latent in mix models is the latent of disease part
     return latents
 
@@ -81,23 +81,17 @@ def save_latent_batch(latents_dict, phase, scaled, color_df, methods=["pca", "um
         enc_size = name.split("_enc")[-1]
         base_name = model_tag.split("H-")[1].split("_D-")[0] if "H-" in model_tag else "standalone"
         model_root = cfg.get_path(phase, scale_str, model_tag, enc_size, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
-        coord_dir = model_root / "latent_space"
-        coord_dir.mkdir(parents=True, exist_ok=True)
-
-        ## path for visual summaries - inside plots/tournament-H..
-        summary_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}" / "latent_analysis"
-        summary_root.mkdir(parents=True, exist_ok=True)
 
         for m in methods:
             coords = generate_coords(Z, method=m)
-            np.save(coord_dir / f"{m}_coords.npy", coords)
+            np.save(model_root / f"{m}_coords.npy", coords)
             
             # General Loop: Color by every column provided in the dataframe
-            for col in color_df.columns:
-                title = f"{model_tag} ({enc_size}) {m.upper()} | {col}"
-                # Save one copy in the model folder (archive) and one in the tournament folder (review)
-                save_path = coord_dir / f"{m}_{col}.png"
-                plot_latent_space(coords, color_df[col].values, col, title, save_path)
+            # for col in color_df.columns:
+            #     title = f"{model_tag} ({enc_size}) {m.upper()} | {col}"
+            #     # Save one copy in the model folder (archive) and one in the tournament folder (review)
+            #     save_path = model_root / f"{m}_{col}.png"
+            #     plot_latent_space(coords, color_df[col].values, col, title, save_path)
 
 # -------------------------------------------------------------------
 # 3. PLOTTING SCATTER PLOT
@@ -131,7 +125,7 @@ def plot_latent_space(coords, color_values, label_name, title, save_path, cmap="
 # -------------------------------------------------------------------
 
 def plot_general_comparison_grid(phase, scaled, color_values, label_name, 
-                                 row_keys, col_keys, method="umap", save_subdir="latent_grids"):
+                                 row_keys, col_keys, method="umap", save_subdir="latent_grids", is_mixed=False):
     """
     Creates a flexible grid where:
     Rows = Encoding Sizes
@@ -150,13 +144,13 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
     if len(col_keys) == 1: axes = np.expand_dims(axes, axis=-1)
 
     vmin, vmax = color_values.min(), color_values.max()
-
+    # rows are enc sizes, cols are model types
     for i, row_val in enumerate(row_keys):
         for j, col_val in enumerate(col_keys):
             ax = axes[i, j]
             
             # General path logic using the row/col identifiers
-            path = cfg.get_path(phase, scale_str, col_val, row_val) / "latent_space" / f"{method}_coords.npy"
+            path = cfg.get_path(phase, scale_str, col_val, row_val, is_mixed=is_mixed) / f"{method}_coords.npy"
             
             if path.exists():
                 coords = np.load(path)
@@ -168,12 +162,25 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
             
             ax.set_xticks([]); ax.set_yticks([])
 
-    fig.suptitle(f"{method.upper()} Grid | Target: {label_name}", fontsize=16)
+    # fig.suptitle(f"{method.upper()} Grid | Target: {label_name}", fontsize=16)
     
-    # Save to a dynamic path
-    summary_dir = cfg.BASE_EXP_DIR / phase / "plots" / save_subdir / scale_str
+    # # Save to a dynamic path
+    # summary_dir = cfg.get_path(phase, scale_str, col_val, row_val, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed)
+    # summary_dir.mkdir(parents=True, exist_ok=True)
+    # plt.savefig(summary_dir / f"grid_{method}_{label_name}.png", dpi=200)
+    # plt.close()
+    mix_str = "MIXED (H+D)" if is_mixed else "DISEASE ONLY"
+    fig.suptitle(f"{method.upper()} Grid | Target: {label_name} | {mix_str}", fontsize=16)
+    
+    # 1. Get the root plot folder for this specific phase/mix
+    plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed)
+    
+    # 2. Add the subdirectories for the grids
+    summary_dir = plot_root / save_subdir / scale_str
     summary_dir.mkdir(parents=True, exist_ok=True)
-    plt.savefig(summary_dir / f"grid_{method}_{label_name}.png", dpi=200)
+    
+    # 3. Save!
+    plt.savefig(summary_dir / f"grid_{method}_{label_name}_{scale_str}.png", dpi=200)
     plt.close()
 
 def plot_comprehensive_comparison_grid(phase, scaled, sig_name, sig_values, perplexities, split_info=None):
@@ -209,7 +216,7 @@ def plot_comprehensive_comparison_grid(phase, scaled, sig_name, sig_values, perp
                 
                 # Load saved coordinates
                 coord_file = f"{method.lower()}_coords.npy"
-                path = cfg.get_path(phase, scale_str, model_tag, enc) / "latent_space" / coord_file
+                path = cfg.get_path(phase, scale_str, model_tag, enc) / coord_file
                 
                 if not path.exists():
                     ax.axis("off")
@@ -284,7 +291,7 @@ def plot_model_family_grids(phase, scaled, sig_name, sig_values, perplexities, s
         for i, enc in enumerate(encoding_sizes):
             for j, method in enumerate(methods):
                 ax = axes[i, j]
-                path = cfg.get_path(phase, scale_str, model_tag, enc) / "latent_space" / f"{method.lower()}_coords.npy"
+                path = cfg.get_path(phase, scale_str, model_tag, enc) / f"{method.lower()}_coords.npy"
                 
                 if not path.exists():
                     ax.axis("off")
@@ -309,7 +316,7 @@ def plot_model_family_grids(phase, scaled, sig_name, sig_values, perplexities, s
         fig.suptitle(f"Model: {model_tag.upper()} | Phase: {phase} | Sig: {sig_name}", fontsize=16)
         
         # Save to a subfolder named after the model
-        summary_dir = cfg.HEALTHY_OUT_DIR / "plots" / "model_specific_grids" / scale_str / model_tag
+        summary_dir = cfg.get_path() / "model_specific_grids" / scale_str / model_tag
         summary_dir.mkdir(parents=True, exist_ok=True)
         
         plt.savefig(summary_dir / f"{sig_name}_analysis.png", dpi=150, bbox_inches='tight')

@@ -46,8 +46,8 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     print(f"\n>>> STARTING LATENT ANALYSIS | Phase: {phase} | Mixed: {is_mixed} | Mode: {mode}")
     
     # Tournament for visualization
-    disease_models = ["mix_H-pca_D-ae_basic", "mix_H-pca_D-ae_layered", "mix_H-pca_D-pca"]
-    healthy_models = ["ae_basic", "ae_layered", "pca"]
+    disease_models = ["mix_H-pca_D-pca", "mix_H-pca_D-ae_basic", "mix_H-pca_D-ae_layered" ]
+    healthy_models = ["pca", "ae_basic", "ae_layered"]
     
     model_tags = disease_models if phase == "disease" else healthy_models
     
@@ -117,7 +117,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 if __name__ == '__main__':
     
     # Analyze Healthy Baselines (Phase 1)
-    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
+    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="fixed")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
     # for mode in ["true", "fixed"]:
