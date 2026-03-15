@@ -94,7 +94,18 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
         lu.save_latent_batch(latents, phase, scale, color_df=color_df, methods=["pca", "umap"], is_mixed=is_mixed)
 
         # Generate Global Comparison Grids
-
+        for m in ["umap", "pca"]:
+            lu.plot_combined_comparison_grid(
+                phase=phase, 
+                scaled=True, 
+                theta_values=test_df['theta_value'],     # Maps to the Magma colors
+                disease_values=test_df['disease_type'],  # Maps to the Shapes (Circles/Triangles)
+                row_keys=cfg.ENCODING_SIZES, 
+                col_keys=model_tags, 
+                method=m,
+                is_mixed=is_mixed 
+            )
+        return
         # color by Theta to see the signal separation
         print(f"############### visualization targets: {visualization_targets} ############")
         for target in visualization_targets:
@@ -124,22 +135,22 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 if __name__ == '__main__':
     
     # Analyze Healthy Baselines (Phase 1)
-    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
+    # run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
-    # for mode in ["true", "fixed"]:
-    #     # Update config flags to match experiment
-    #     if mode == "true":
-    #         cfg.RANDOM_THETA_EXP = False
-    #         cfg.FIXED_THETA_EXP = False
-    #     elif mode == "fixed":
-    #         cfg.RANDOM_THETA_EXP = False
-    #         cfg.FIXED_THETA_EXP = True
+    for mode in ["true", "fixed"]:
+        # Update config flags to match experiment
+        if mode == "true":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = False
+        elif mode == "fixed":
+            cfg.RANDOM_THETA_EXP = False
+            cfg.FIXED_THETA_EXP = True
         
-    #     # Analyze Disease Models trained with ALL samples (H + D)
-    #     run_comprehensive_latent_analysis("disease", is_mixed=True, mode=mode)
+        # Analyze Disease Models trained with ALL samples (H + D)
+        run_comprehensive_latent_analysis("disease", is_mixed=True, mode=mode)
         
-    #     # Analyze Disease Models trained with Disease Samples Only
-    #     run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
+        # Analyze Disease Models trained with Disease Samples Only
+        run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
 
 

@@ -171,8 +171,8 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
     split_path = cfg.get_split_path(phase=phase, scale_tag=tag, is_mixed=is_mixed)
     train_df, test_df = get_split_data(df_target, split_path=split_path)
     info_dict = {
-        'test_df_full': test_df.copy(), # Keep everything (genes, theta, type)
-        'train_df_full': train_df.copy()
+        'test_df_full': test_df.copy().fillna(0.0), # Keep everything (genes, theta, type)
+        'train_df_full': train_df.copy().fillna(0.0)
     }
     # 3. Clean Metadata (Drop disease_type but KEEP theta_value)
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
