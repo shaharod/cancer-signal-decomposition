@@ -142,7 +142,7 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
         
     return df_genes
 
-def load_and_prep_tensors(phase, mode, scale_bool, is_mixed, theta_tag=""):
+def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
     """
     Unified Pipeline: 
     1. Loads (Healthy/Disease/Mixed) 
@@ -191,7 +191,7 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed, theta_tag=""):
     
     # Scale only the genes via the smart fit_and_scale
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(
-        train_df, test_df, phase, is_mixed, theta_tag
+        train_df, test_df, phase, is_mixed, mode
     )
     
     # 5. Recombine [Genes | Theta]

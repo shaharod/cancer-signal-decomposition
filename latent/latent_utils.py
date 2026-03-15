@@ -131,6 +131,7 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
     Rows = Encoding Sizes
     Cols = Model Architectures
     """
+    tournament_name_dict = {"pca": "PCA", "ae_basic": "Basic_AE", "ae_layered": "Layered_AE"}
     scale_str = "scaled" if scaled else "unscaled"
     fig, axes = plt.subplots(
         nrows=len(row_keys),
@@ -142,8 +143,23 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
     # Handle 1D axes arrays
     if len(row_keys) == 1: axes = np.expand_dims(axes, axis=0)
     if len(col_keys) == 1: axes = np.expand_dims(axes, axis=-1)
-
+    # Dynamically extract the healthy base
+    first_col = col_keys[0]
+    base_name = first_col.split("H-")[1].split("_D-")[0] if "H-" in first_col else "standalone"
+    tournament_folder = f"Tournament_H-{tournament_name_dict[base_name]}"
+    is_categorical = (label_name == "disease_type")
     vmin, vmax = color_values.min(), color_values.max()
+    if vmax == vmin:
+        print("why are vmin and vmax the same val")
+    if is_categorical:
+        # Get a discrete colormap with exactly the right number of colors
+        num_classes = int(vmax - vmin + 1)
+        cmap = plt.get_cmap("tab10", num_classes)
+        # Offset vmin/vmax by 0.5 so the colors center perfectly on the integers 0, 1, 2
+        plot_vmin, plot_vmax = vmin - 0.5, vmax + 0.5
+    else:
+        cmap = plt.get_cmap("magma")
+        plot_vmin, plot_vmax = vmin, vmax
     # rows are enc sizes, cols are model types
     for i, row_val in enumerate(row_keys):
         for j, col_val in enumerate(col_keys):
@@ -155,35 +171,38 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
             if path.exists():
                 coords = np.load(path)
                 sc = ax.scatter(coords[:, 0], coords[:, 1], c=color_values, 
-                                cmap="magma", vmin=vmin, vmax=vmax, s=8, alpha=0.6)
+                                cmap=cmap, vmin=plot_vmin, vmax=plot_vmax, s=12, alpha=0.8)
                 ax.set_title(f"{col_val} | {row_val}", fontsize=10)
             else:
                 ax.axis("off")
             
             ax.set_xticks([]); ax.set_yticks([])
 
-    # fig.suptitle(f"{method.upper()} Grid | Target: {label_name}", fontsize=16)
     
-    # # Save to a dynamic path
-    # summary_dir = cfg.get_path(phase, scale_str, col_val, row_val, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed)
-    # summary_dir.mkdir(parents=True, exist_ok=True)
-    # plt.savefig(summary_dir / f"grid_{method}_{label_name}.png", dpi=200)
-    # plt.close()
     mix_str = "MIXED (H+D)" if is_mixed else "DISEASE ONLY"
     fig.suptitle(f"{method.upper()} Grid | Target: {label_name} | {mix_str}", fontsize=16)
-    
-    # 1. Get the root plot folder for this specific phase/mix
+    sm = plt.cm.ScalarMappable(norm=plt.Normalize(vmin=plot_vmin, vmax=plot_vmax), cmap=cmap)
+    cbar = fig.colorbar(sm, ax=axes, orientation='vertical', fraction=0.02, pad=0.04)
+    if is_categorical:
+        # Snap the ticks to the exact integers (0, 1, 2)
+        ticks = np.arange(vmin, vmax + 1)
+        cbar.set_ticks(ticks)
+        
+        # Map your specific biological labels
+        class_dict = {0: "Healthy", 1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+        cbar.set_ticklabels([class_dict.get(int(t), f"Class {int(t)}") for t in ticks])
+        cbar.set_label("Ground Truth Classification", fontsize=12, fontweight='bold')
+    else:
+        cbar.set_label(label_name, fontsize=12, fontweight='bold')
+
     plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed)
-    
-    # 2. Add the subdirectories for the grids
-    summary_dir = plot_root / save_subdir / scale_str
+    summary_dir = plot_root / tournament_folder / save_subdir / scale_str
     summary_dir.mkdir(parents=True, exist_ok=True)
     
-    # 3. Save!
     plt.savefig(summary_dir / f"grid_{method}_{label_name}_{scale_str}.png", dpi=200)
     plt.close()
 
-def plot_comprehensive_comparison_grid(phase, scaled, sig_name, sig_values, perplexities, split_info=None):
+def plot_comprehensive_comparison_grid(phase, scaled, sig_name, sig_values, perplexities, split_info=None, is_mixed=False):
     """
     Creates a grid: 
     Rows = Model Families (AEs, PCA) 
@@ -253,10 +272,10 @@ def plot_comprehensive_comparison_grid(phase, scaled, sig_name, sig_values, perp
     cbar = fig.colorbar(sm, ax=axes, orientation='vertical', fraction=0.02, pad=0.04)
     cbar.set_label(f"Signature Level: {sig_name}", fontsize=12)
 
-    # Save to a dedicated summary folder
-    summary_dir = cfg.HEALTHY_OUT_DIR / "plots" / "comprehensive_grids" / scale_str
+    plot_root = cfg.get_path(phase, folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed)
+    summary_dir = plot_root / "comprehensive_grids" / scale_str
     summary_dir.mkdir(parents=True, exist_ok=True)
-    
+
     out_path = summary_dir / f"comprehensive_{sig_name}.png"
     plt.savefig(out_path, dpi=200, bbox_inches='tight')
     plt.close()

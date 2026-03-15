@@ -8,7 +8,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 
 # ---- Global Decisions ----
 RANDOM_THETA_EXP = False
-FIXED_THETA_EXP = True
+FIXED_THETA_EXP = False
 SYNTHETIC_DATA = True
 SYN_SIMPLE = False
 SYN_CMPLX = not SYN_SIMPLE

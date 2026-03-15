@@ -23,6 +23,10 @@ Key Logic:
 import sys
 from pathlib import Path
 print(sys.executable)
+import warnings
+
+# Suppress the specific UMAP n_jobs warning
+warnings.filterwarnings("ignore", message="n_jobs value 1 overridden to 1 by setting random_state")
 # Get the path of the current file's directory
 current_file = Path(__file__).resolve()
 
@@ -54,13 +58,14 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
         
-        # Load the specific Test Set and Metadata (Theta, etc.)
-        # ensures we color points by the correct sample IDs
-        if phase == "disease":
-            _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
-        elif phase == "healthy":
-            pass
-        test_t = torch.Tensor(test_df.values).float()
+        
+        train_t, test_t, scaler, info = du.load_and_prep_tensors(phase, mode, scale, is_mixed)
+        test_df = info["test_df_full"]
+        # if phase == "disease":
+        #     _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
+        # elif phase == "healthy":
+        #     pass
+        # test_t = torch.Tensor(test_df.values).float()
         
         # Extract Latents
         # use the correct loader based on the phase
@@ -91,7 +96,9 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
         # Generate Global Comparison Grids
 
         # color by Theta to see the signal separation
+        print(f"############### visualization targets: {visualization_targets} ############")
         for target in visualization_targets:
+            print(f" ################### VISUAL TARGET: {target} ################3")
             lu.plot_general_comparison_grid(
                 phase=phase, 
                 scaled=scale, 
@@ -105,7 +112,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 
             lu.plot_general_comparison_grid(
             phase=phase, 
-            scaled=False, 
+            scaled=scale, 
             color_values=test_df[target].values, 
             label_name=target,
             row_keys=cfg.ENCODING_SIZES, 
@@ -117,7 +124,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 if __name__ == '__main__':
     
     # Analyze Healthy Baselines (Phase 1)
-    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="fixed")
+    run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
     # for mode in ["true", "fixed"]:
