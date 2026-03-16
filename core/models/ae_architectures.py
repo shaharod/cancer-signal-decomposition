@@ -11,7 +11,8 @@ class Basic_AE(nn.Module):
         self.decoder = nn.Sequential(nn.Linear(encoding_size, input_size)
                                      , self.end_activation 
                                      ) 
-        nn.init.constant_(self.decoder[-2].bias, 50.0)
+        if not scale:
+            nn.init.constant_(self.decoder[-2].bias, 50.0)
 
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -48,7 +49,8 @@ class Layered_AE(nn.Module):
             nn.Linear(h1, input_size)
             , self.end_activation       
         )
-        nn.init.constant_(self.decoder[-2].bias, 50.0)
+        if not scale:
+            nn.init.constant_(self.decoder[-2].bias, 50.0)
 
         
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
