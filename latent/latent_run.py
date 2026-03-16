@@ -105,7 +105,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
                 method=m,
                 is_mixed=is_mixed 
             )
-        return
+        
         # color by Theta to see the signal separation
         print(f"############### visualization targets: {visualization_targets} ############")
         for target in visualization_targets:

@@ -64,19 +64,19 @@ BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
 
-# def choose_enc_layers():
-#     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
-#         return [16, 32, 64, 128], 512, 128
-#     else:
-#         return [8, 16], 32, 16
+def choose_enc_layers():
+    if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
+        return [16, 32, 64, 128], 512, 128
+    else:
+        return [8, 16], 32, 16
     
-# ENCODING_SIZES, H1, H2 = choose_enc_layers() # [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
+ENCODING_SIZES, H1, H2 = choose_enc_layers() # [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
 
 
-# old Layered AE architecture settings
-ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
-H1 = 512 if not SYNTHETIC_DATA else 32
-H2 = 128 if not SYNTHETIC_DATA else 16
+# # old Layered AE architecture settings
+# ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
+# H1 = 512 if not SYNTHETIC_DATA else 32
+# H2 = 128 if not SYNTHETIC_DATA else 16
 
 # ---- Tournament Logic Helpers ----
 SCALING_OPTIONS = [True, False]
