@@ -7,11 +7,12 @@ from .mix_model import UniversalMixModel
 
 class ModelFactory:
     @staticmethod
-    def create_model(model_type, input_size, encoding_size, h1, h2):
+    def create_model(model_type, input_size, encoding_size, h1, h2, scale_bool):
         """
         Creates a standalone Autoencoder model.
         Used for Phase 1 (Healthy) and the Disease-side of Phase 2.
         """
+
         if model_type == "pca":
             pca_obj = PCA(n_components=encoding_size)
             pca_obj.mean_ = np.zeros(input_size)
@@ -19,10 +20,10 @@ class ModelFactory:
             pca_obj.n_components_ = encoding_size
             return PCAComponent(pca_obj)
         if model_type == "ae_basic":
-            return Basic_AE(input_size, encoding_size)
+            return Basic_AE(input_size, encoding_size, scale_bool)
         elif model_type == "ae_layered":
             # Note: H1 and H2 are usually pulled from config
-            return Layered_AE(input_size, encoding_size, h1, h2)
+            return Layered_AE(input_size, encoding_size, h1, h2, scale_bool)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 

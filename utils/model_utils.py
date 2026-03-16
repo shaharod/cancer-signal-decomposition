@@ -5,17 +5,18 @@ from core.models.model_factory import ModelFactory
 import config as cfg
 
 def create_load_mix_model(folder_tag, test_set, gene_size, enc, scale_tag):
+    scale_bool = True if scale_tag == "scaled" else False
     parts = folder_tag.split('_H-')
     h_and_d = parts[1].split('_D-')
     h_type, d_type = h_and_d[0], h_and_d[1]
     is_pca = "pca" in d_type.lower()
     is_mix = "mix" in folder_tag
     if is_mix:
-        h_model = ModelFactory.create_model(h_type, gene_size, enc, cfg.H1, cfg.H2)
-        d_model = ModelFactory.create_model(d_type, gene_size, enc, cfg.H1, cfg.H2)
+        h_model = ModelFactory.create_model(h_type, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
+        d_model = ModelFactory.create_model(d_type, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
         model = ModelFactory.create_mix_model(h_model, d_model)
     else:
-        model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2)
+        model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
     # print(f"curr model is {h_and_d} and has:\n {model}")        
     ext = "model.joblib" if is_pca else "model.pt"
     model_path = cfg.get_path('disease', scale_tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=True) / ext
@@ -79,7 +80,7 @@ def create_load_standalone_model(phase, m_type, enc, scale_bool, input_size, tes
         print(f"--> [Error] Standalone model not found: {full_path}")
         return None
 
-    model = ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
+    model = ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2, scale_bool)
 
     if is_pca:
         pca_sk = joblib.load(full_path)

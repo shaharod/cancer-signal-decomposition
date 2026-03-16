@@ -78,7 +78,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             for h_arch in cfg.MODEL_TYPES:
                 h_path = cfg.get_path("healthy", tag, h_arch, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed) / "model.pt"
                 if h_path.exists():
-                    h_model = ModelFactory.create_model(h_arch, input_dim, enc, cfg.H1, cfg.H2)
+                    h_model = ModelFactory.create_model(h_arch, input_dim, enc, cfg.H1, cfg.H2, scale)
                     h_model.load_state_dict(torch.load(h_path, weights_only=True))                   
                     healthy_library.append((h_arch, h_model))
             

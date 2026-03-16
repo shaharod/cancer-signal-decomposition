@@ -70,7 +70,7 @@ def choose_enc_layers():
     else:
         return [8, 16], 32, 16
     
-ENCODING_SIZES, H1, H2 = choose_enc_layers() # [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
+ENCODING_SIZES, H1, H2 = choose_enc_layers() 
 
 
 # # old Layered AE architecture settings

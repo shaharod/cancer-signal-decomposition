@@ -3,14 +3,16 @@ import torch.nn as nn
 from typing import Tuple
 
 class Basic_AE(nn.Module):
-    def __init__(self, input_size: int, encoding_size: int):
+    def __init__(self, input_size: int, encoding_size: int, scale: bool):
         super().__init__()
+        self.end_activation = nn.Identity() if scale else nn.ReLU()
         self.in_features = input_size # Added for the Trainer to identify input width
         self.encoder = nn.Sequential(nn.Linear(input_size, encoding_size))
         self.decoder = nn.Sequential(nn.Linear(encoding_size, input_size)
-                                     , nn.ReLU() 
+                                     , self.end_activation 
                                      ) 
         nn.init.constant_(self.decoder[-2].bias, 50.0)
+
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         if x.shape[1] > self.in_features:
@@ -25,9 +27,10 @@ class Basic_AE(nn.Module):
 
 
 class Layered_AE(nn.Module):
-    def __init__(self, input_size: int, encoding_size: int, h1: int, h2: int):
+    def __init__(self, input_size: int, encoding_size: int, h1: int, h2: int, scale: bool):
         super(Layered_AE, self).__init__()
         self.in_features = input_size
+        self.end_activation = nn.Identity() if scale else nn.ReLU()
 
         self.encoder = nn.Sequential(
             nn.Linear(input_size, h1),
@@ -43,7 +46,7 @@ class Layered_AE(nn.Module):
             nn.Linear(h2, h1),
             nn.GELU(),
             nn.Linear(h1, input_size)
-            , nn.ReLU() # Gradients never die       )
+            , self.end_activation       
         )
         nn.init.constant_(self.decoder[-2].bias, 50.0)
 
