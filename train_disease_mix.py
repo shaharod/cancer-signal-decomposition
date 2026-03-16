@@ -137,7 +137,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
 
                     print(f"Testing: {label} | {tag} | Enc: {enc}")
                     
-                    disease_model = ModelFactory.create_model(d_arch, input_dim, enc, cfg.H1, cfg.H2)
+                    disease_model = ModelFactory.create_model(d_arch, input_dim, enc, cfg.H1, cfg.H2, scale)
                     mix_model = ModelFactory.create_mix_model(h_obj, disease_model)
                     
                     trainer = Trainer(mix_model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)

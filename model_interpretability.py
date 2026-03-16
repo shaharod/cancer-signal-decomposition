@@ -158,7 +158,7 @@ def load_revived_model(h_type, d_type=None, enc=8, scale_bool=False, is_mixed=Fa
         if is_pca:
             return joblib.load(path / ext)
         else:
-            obj = ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2)
+            obj = ModelFactory.create_model(m_type, input_size, enc, cfg.H1, cfg.H2, scale_bool)
             checkpoint = torch.load(path / ext, map_location="cpu")
             if isinstance(checkpoint, dict):
                 # Try different common keys used in your project
@@ -1198,7 +1198,7 @@ def analyze_healthy_reconstruction(labels_dict, scale_bool, save_path, mode="tru
                 
                 try:
                     # --- LOAD HEALTHY MODEL ---
-                    model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2)
+                    model = ModelFactory.create_model(folder_tag, input_size, enc, cfg.H1, cfg.H2, scale_bool)
                     
                     is_pca = "pca" in folder_tag.lower()
                     ext = "model.joblib" if is_pca else "model.pt"
