@@ -8,10 +8,10 @@ DATA_PATH = PROJECT_ROOT / 'data'
 
 # ---- Global Decisions ----
 RANDOM_THETA_EXP = False
-FIXED_THETA_EXP = True
+FIXED_THETA_EXP = False
 SYNTHETIC_DATA = True
 SYN_SIMPLE = False
-SYN_CMPLX = True
+SYN_CMPLX = not SYN_SIMPLE
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
 
 def get_theta_mode():
@@ -46,7 +46,7 @@ else:
 if SYNTHETIC_DATA:
     HEALTHY_GENES_PATH = DATA_SUB / "healthy_data.csv"
     # DISEASE_GENES_PATH = DATA_SUB / ("disease_data_theta05.csv" if FIXED_THETA_EXP else "disease_data_uniform_theta.csv")
-    THETA_PATH         = DATA_SUB / "syn_theta_values.csv"
+    THETA_PATH         = DATA_SUB / "theta_values.csv"
 else:
     HEALTHY_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_healthy.csv"
     # DISEASE_GENES_PATH = DATA_SUB / "GeneMatrix_H3K4me3_crc.csv"
@@ -63,10 +63,18 @@ EPOCHS_NUM     = 300
 BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
+
+# def choose_enc_layers():
+#     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
+#         return [16, 32, 64, 128], 512, 128
+#     else:
+#         return [8, 16], 32, 16
+    
+# ENCODING_SIZES, H1, H2 = choose_enc_layers() # [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
+
+
+# old Layered AE architecture settings
 ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
-
-
-# Layered AE architecture settings
 H1 = 512 if not SYNTHETIC_DATA else 32
 H2 = 128 if not SYNTHETIC_DATA else 16
 
@@ -85,7 +93,11 @@ PLOTS_SUBFOLDER = 'plots'
 
 # base
 BASE_EXP_DIR = PROJECT_ROOT / 'outputs' / ('synthetic_experiments' if SYNTHETIC_DATA else 'real_experiments')
+if SYNTHETIC_DATA:
+    suffix = "_simple" if SYN_SIMPLE else "_cmplx"
 
+    BASE_EXP_DIR = BASE_EXP_DIR.with_name(BASE_EXP_DIR.name + suffix)
+    
 # sub-folders types
 HEALTHY_OUT_DIR = BASE_EXP_DIR / 'healthy'
 DISEASE_OUT_DIR = BASE_EXP_DIR / 'disease_mix'

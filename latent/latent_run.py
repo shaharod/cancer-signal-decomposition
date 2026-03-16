@@ -22,11 +22,11 @@ Key Logic:
 
 import sys
 from pathlib import Path
-import torch
-import config as cfg
-import latent_utils as lu
-import utils.data_utils as du
+print(sys.executable)
+import warnings
 
+# Suppress the specific UMAP n_jobs warning
+warnings.filterwarnings("ignore", message="n_jobs value 1 overridden to 1 by setting random_state")
 # Get the path of the current file's directory
 current_file = Path(__file__).resolve()
 
@@ -36,6 +36,10 @@ project_root = current_file.parents[1]
 
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
+import torch
+import config as cfg
+import latent_utils as lu
+import utils.data_utils as du
 
 
 
@@ -45,20 +49,23 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     """
     print(f"\n>>> STARTING LATENT ANALYSIS | Phase: {phase} | Mixed: {is_mixed} | Mode: {mode}")
     
-    # Tournament winners for visualization
-    # You can add more from cfg.MODEL_TYPES if you want a full grid
-    disease_models = ["mix_H-pca_D-ae_basic", "mix_H-pca_D-ae_layered", "mix_H-pca_D-pca"]
-    healthy_models = ["ae_basic", "ae_layered", "pca"]
+    # Tournament for visualization
+    disease_models = ["mix_H-pca_D-pca", "mix_H-pca_D-ae_basic", "mix_H-pca_D-ae_layered" ]
+    healthy_models = ["pca", "ae_basic", "ae_layered"]
     
     model_tags = disease_models if phase == "disease" else healthy_models
     
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
         
-        # Load the specific Test Set and Metadata (Theta, etc.)
-        # ensures we color points by the correct sample IDs
-        _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
-        test_t = torch.Tensor(test_df.values).float()
+        
+        train_t, test_t, scaler, info = du.load_and_prep_tensors(phase, mode, scale, is_mixed)
+        test_df = info["test_df_full"]
+        # if phase == "disease":
+        #     _, test_df = du.fix_df_data(scale, mode=mode, is_mixed=is_mixed)
+        # elif phase == "healthy":
+        #     pass
+        # test_t = torch.Tensor(test_df.values).float()
         
         # Extract Latents
         # use the correct loader based on the phase
@@ -87,9 +94,22 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
         lu.save_latent_batch(latents, phase, scale, color_df=color_df, methods=["pca", "umap"], is_mixed=is_mixed)
 
         # Generate Global Comparison Grids
-
+        for m in ["umap", "pca"]:
+            lu.plot_combined_comparison_grid(
+                phase=phase, 
+                scaled=True, 
+                theta_values=test_df['theta_value'],     # Maps to the Magma colors
+                disease_values=test_df['disease_type'],  # Maps to the Shapes (Circles/Triangles)
+                row_keys=cfg.ENCODING_SIZES, 
+                col_keys=model_tags, 
+                method=m,
+                is_mixed=is_mixed 
+            )
+        return
         # color by Theta to see the signal separation
+        print(f"############### visualization targets: {visualization_targets} ############")
         for target in visualization_targets:
+            print(f" ################### VISUAL TARGET: {target} ################3")
             lu.plot_general_comparison_grid(
                 phase=phase, 
                 scaled=scale, 
@@ -103,7 +123,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 
             lu.plot_general_comparison_grid(
             phase=phase, 
-            scaled=False, 
+            scaled=scale, 
             color_values=test_df[target].values, 
             label_name=target,
             row_keys=cfg.ENCODING_SIZES, 
@@ -115,7 +135,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 if __name__ == '__main__':
     
     # Analyze Healthy Baselines (Phase 1)
-    run_comprehensive_latent_analysis("healthy", is_mixed=False, mode="true")
+    # run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
     for mode in ["true", "fixed"]:

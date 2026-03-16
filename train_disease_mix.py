@@ -21,12 +21,12 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.THETA_PATH, mode=mode_val) #cfg.DISEASE_GENES_PATH
             
             # 3. Concatenate 
-            df_combined = pd.concat([df_healthy, df_disease]).sample(frac=1, random_state=42)
+            df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
             df_combined['disease_type'] = df_combined['disease_type'].fillna(0)
 
             train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
             
-            train_t, test_t, scaler = data_utils.get_ready_tensors_df(train_df, test_df, scale)
+            train_t, test_t, scaler = data_utils.get_ready_tensors_df(train_df, test_df, scale, phase="disease", is_mixed=is_mixed, theta=mode_val)
             # raise ValueError(f"train is {train_t.shape} and test is {test_t.shape}")
 
             # Move disease tensors to GPU
@@ -38,7 +38,10 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 disease_gene_path,
                 split_path=cfg.get_split_path("disease", tag, is_mixed), use_scaling=scale,
                 theta_path=cfg.THETA_PATH,
-                mode=mode_val
+                mode=mode_val,
+                phase="disease",
+                is_mixed=is_mixed,
+                theta=mode_val
             )
 
         # train_d = train_d[:, :-1]
@@ -164,6 +167,6 @@ if __name__ == "__main__":
             cfg.RANDOM_THETA_EXP = False
             cfg.FIXED_THETA_EXP = True
             
-        run_cross_architecture_tournament(mode, is_mixed=False)
         run_cross_architecture_tournament(mode, is_mixed=True)
+        run_cross_architecture_tournament(mode, is_mixed=False)
 
