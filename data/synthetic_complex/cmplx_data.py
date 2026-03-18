@@ -117,13 +117,12 @@ def show(title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, aspect=Fals
 from pathlib import Path
 
 # samples files
-healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
-diseaseA_path = Path('../../data/real/GeneMatrix_H3K4me3_crc.csv')
-diseaseB_path = Path('../../data/real/GeneMatrix_H3K4me3_sclc.csv')
-
+healthy_path = Path('C:/Users/saris/OneDrive/University/Year3/project/new_git/cancer-signal-decomposition/data/real/GeneMatrix_H3K4me3_healthy.csv')
+diseaseA_path = Path('C:/Users/saris/OneDrive/University/Year3/project/new_git/cancer-signal-decomposition/data/real/GeneMatrix_H3K4me3_crc.csv')
+diseaseB_path = Path('C:/Users/saris/OneDrive/University/Year3/project/new_git/cancer-signal-decomposition/data/real/GeneMatrix_H3K4me3_sclc.csv')
 # thetas files
-theta_A_path = Path('../../data/real/theta_CRC_passedQC.csv')
-theta_B_path = Path('../../data/real/SCLC_theta.csv')
+theta_A_path = Path('C:/Users/saris/OneDrive/University/Year3/project/new_git/cancer-signal-decomposition/data/real/theta_CRC_passedQC.csv')
+theta_B_path = Path('C:/Users/saris/OneDrive/University/Year3/project/new_git/cancer-signal-decomposition/data/real/SCLC_theta.csv')
 
 print(f'{healthy_path}')
 
@@ -150,12 +149,14 @@ metadata_B = pd.read_csv(theta_B_path)
 # average healthy data
 blueprint_healthy = df_real_healthy.mean(axis=1).values
 print(blueprint_healthy)
+print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
 
 # extract max sample for disease A
 max_idx_A = metadata_A['data_list'].idxmax()
 sample_A = metadata_A.loc[max_idx_A, 'Unnamed: 0']
 theta_A = metadata_A.loc[max_idx_A, 'data_list']
 blueprint_A_mixed = df_real_cancerA[sample_A].values
+print(f"blueprint DiseaseA sum is: {blueprint_A_mixed.sum()}")
 
 # extract max sample for disease B
 max_idx_B = metadata_B['data_list'].idxmax()
@@ -165,6 +166,7 @@ print(f"Healthy profile: Averaged {df_real_healthy.shape[1]} samples.")
 print(f"Disease A Max - Sample: {sample_A}, Theta: {theta_A:.4f}")
 print(f"Disease B Max - Sample: {sample_B}, Theta: {theta_B:.4f}")
 blueprint_B_mixed = df_real_cancerB[sample_B].values
+print(f"blueprint DiseaseB sum is: {blueprint_B_mixed.sum()}")
 
 
 print(f"BlueprintAMixed is {blueprint_A_mixed} with shape {blueprint_A_mixed.shape}")
@@ -201,11 +203,11 @@ healthy_pool = np.random.normal(
 ).clip(min=0)
 
 disease_A_pool = np.random.normal(
-    blueprint_A_mixed[:, None], bio_noise_std, size=(n_genes, n_disease_A_samples)
+    pure_disease_A[:, None], bio_noise_std, size=(n_genes, n_disease_A_samples)
 ).clip(min=0)
 
 disease_B_pool = np.random.normal(
-    blueprint_B_mixed[:, None], bio_noise_std, size=(n_genes, n_disease_B_samples)
+    pure_disease_B[:, None], bio_noise_std, size=(n_genes, n_disease_B_samples)
 ).clip(min=0)
 
 pure_healthy_data = healthy_pool[:, :n_healthy_samples]
@@ -213,7 +215,21 @@ pure_healthy_data = healthy_pool[:, :n_healthy_samples]
 
 print(f"Pools created: Healthy ({healthy_pool.shape}), Disease A ({disease_A_pool.shape}), Disease B ({disease_B_pool.shape})")
 
-# %% [markdown]
+# %% 
+def apply_sequencing_noise(clean_matrix):
+    """
+    Applies Poisson technical noise by anchoring the variance to sequencing depth (0.5M to 5M).
+    Returns the normalized, noisy matrix.
+    """
+    n_samples = clean_matrix.shape[1]
+    target_depths = np.random.uniform(500_000, 5_000_000, size=n_samples)
+    scaling_factors = (target_depths / 1_000_000).reshape(1, -1)
+    
+    expected_counts = clean_matrix * scaling_factors
+    raw_synthetic_counts = np.random.poisson(lam=expected_counts)
+    
+    # Normalize back to stabilize the variance
+    return raw_synthetic_counts / scaling_factors
 # # Mixing
 
 # %%
@@ -223,23 +239,27 @@ n_mix = n_disease_A_samples
 thetas_A = np.random.uniform(0,1,n_mix)
 healthy_data_samples_A = healthy_pool[:, n_healthy_samples:n_healthy_samples+n_mix]
 
-mixed_A = (1 - thetas_A) * healthy_data_samples_A + thetas_A * disease_A_pool
+mixed_A_clean = (1 - thetas_A) * healthy_data_samples_A + thetas_A * disease_A_pool
 
 # mix disease B
 thetas_B = np.random.uniform(0, 1, n_mix)
 healthy_data_samples_B = healthy_pool[:, n_mix + n_healthy_samples:]
 
-mixed_B = (1 - thetas_B) * healthy_data_samples_B + thetas_B * disease_B_pool
+mixed_B_clean = (1 - thetas_B) * healthy_data_samples_B + thetas_B * disease_B_pool
 
-print(f"Created mixtures. Mix A shape: {mixed_A.shape}, Mix B shape: {mixed_B.shape}")
+print(f"Created mixtures. Mix A shape: {mixed_A_clean.shape}, Mix B shape: {mixed_B_clean.shape}")
 print(f"healthy data samples: {healthy_data_samples_A.shape}")
 
+## applying tech noise
+final_mixed_A = apply_sequencing_noise(mixed_A_clean)
+final_mixed_B = apply_sequencing_noise(mixed_B_clean)
+final_healthy = apply_sequencing_noise(pure_healthy_data)
 # %% [markdown]
 # ## Saving
 
 # %%
 
-df_healthy = pd.DataFrame(pure_healthy_data, index=df_real_healthy.index, 
+df_healthy = pd.DataFrame(final_healthy, index=df_real_healthy.index, 
                           columns=[f'Healthy-Sample{i}' for i in range(pure_healthy_data.shape[1])])
 df_healthy.to_csv('healthy_data.csv')
 
@@ -253,14 +273,14 @@ df_pure_B = pd.DataFrame(disease_B_pool, index=df_real_healthy.index,
 # df_pure_B.to_csv('pure_disease_B.csv')
 
 # 4. Save Mixed Data A and its Theta values
-df_mixed_A = pd.DataFrame(mixed_A, index=df_real_healthy.index, 
-                          columns=[f'DiseaseA-Sample{i}' for i in range(mixed_A.shape[1])])
+df_mixed_A = pd.DataFrame(final_mixed_A, index=df_real_healthy.index, 
+                          columns=[f'DiseaseA-Sample{i}' for i in range(final_mixed_A.shape[1])])
 # df_mixed_A.to_csv('mixed_data_A.csv')
 # pd.Series(thetas_A, name='Theta').to_csv('mixed_A_thetas.csv', index=False)
 
 # 5. Save Mixed Data B and its Theta values
-df_mixed_B = pd.DataFrame(mixed_B, index=df_real_healthy.index, 
-                          columns=[f'DiseaseB-Sample{i}' for i in range(mixed_B.shape[1])])
+df_mixed_B = pd.DataFrame(final_mixed_B, index=df_real_healthy.index, 
+                          columns=[f'DiseaseB-Sample{i}' for i in range(final_mixed_B.shape[1])])
 # df_mixed_B.to_csv('mixed_data_B.csv')
 # pd.Series(thetas_B, name='Theta').to_csv('mixed_B_thetas.csv', index=False)
 
@@ -315,20 +335,22 @@ fixed_theta = 0.5
 
 # Mix the data using the fixed 0.5 ratio
 # We reuse healthy_data_samples_A/B so the background noise is consistent!
-mixed_A_05 = (1 - fixed_theta) * healthy_data_samples_A + fixed_theta * disease_A_pool
-mixed_B_05 = (1 - fixed_theta) * healthy_data_samples_B + fixed_theta * disease_B_pool
+mixed_A_05_clean = (1 - fixed_theta) * healthy_data_samples_A + fixed_theta * disease_A_pool
+mixed_B_05_clean = (1 - fixed_theta) * healthy_data_samples_B + fixed_theta * disease_B_pool
 
+final_mixed_A_05 = apply_sequencing_noise(mixed_A_05_clean)
+final_mixed_B_05 = apply_sequencing_noise(mixed_B_05_clean)
 # Convert these new matrices into Pandas DataFrames
 df_mixed_A_05 = pd.DataFrame(
-    mixed_A_05, 
+    final_mixed_A_05, 
     index=df_real_healthy.index, 
-    columns=[f'DiseaseA-Sample{i}' for i in range(mixed_A_05.shape[1])]
+    columns=[f'DiseaseA-Sample{i}' for i in range(final_mixed_A_05.shape[1])]
 )
 
 df_mixed_B_05 = pd.DataFrame(
-    mixed_B_05, 
+    final_mixed_B_05, 
     index=df_real_healthy.index, 
-    columns=[f'DiseaseB-Sample{i}' for i in range(mixed_B_05.shape[1])]
+    columns=[f'DiseaseB-Sample{i}' for i in range(final_mixed_B_05.shape[1])]
 )
 
 # Combine them side-by-side
