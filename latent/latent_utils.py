@@ -34,13 +34,24 @@ def get_mix_latents(mix_type, input_size, enc_sizes, scale_tag, is_mixed, test_t
     return latents
 
 
-def choose_sig_list(phase):
-    if phase == "synthetic":
-        return cfg.SYN_SIG_LIST
-    if phase == "real":
-        return cfg.REAL_SYN_LIST
-    raise ValueError("Add here other signature lists i might want and have better phase names") #TODO in future, do as error states
+# def choose_sig_list(phase):
+#     if phase == "synthetic":
+#         return cfg.SYN_SIG_LIST
+#     if phase == "real":
+#         return cfg.REAL_SYN_LIST
+#     raise ValueError("Add here other signature lists i might want and have better phase names") #TODO in future, do as error states
 
+def choose_sig_list(phase, disease_type):
+    basic_l = ["Megakaryocyte", "Neutrophils"]
+    if phase == "synthetic_complex":
+
+        match disease_type:
+            case "Healthy":
+                return basic_l
+            case "DiseaseA": #crc
+                return ["Colon", "Rectum", "Colorectal", "Digestive", "GI", "GI Mucosa"] + basic_l
+            case "DiseaseB":
+                return ["Lung"] + basic_l
 # -------------------------------------------------------------------
 # 2. COORDINATE GENERATION & SAVING (Z -> 2D)
 # -------------------------------------------------------------------
@@ -154,7 +165,13 @@ def plot_general_comparison_grid(phase, scaled, color_values, label_name,
     if is_categorical:
         # Get a discrete colormap with exactly the right number of colors
         num_classes = int(vmax - vmin + 1)
-        cmap = plt.get_cmap("tab10", num_classes)
+        color_dict = {
+            0: "#2ecc71",   # Healthy
+            1: "#d43220",   # Disease A (CRC)
+            2: "#870fb6"   # Disease B (SCLC)
+        }
+        color_list = [color_dict.get(int(val), "black") for val in range(int(vmin), int(vmax) + 1)]
+        cmap = plt.matplotlib.colors.ListedColormap(color_list)
         # Offset vmin/vmax by 0.5 so the colors center perfectly on the integers 0, 1, 2
         plot_vmin, plot_vmax = vmin - 0.5, vmax + 0.5
     else:
@@ -215,7 +232,9 @@ def plot_combined_comparison_grid(phase, scaled, theta_values, disease_values,
     Creates a master grid mapping Theta to Color (Magma) and Disease Type to Marker Shape.
     Rows = Encoding Sizes, Cols = Model Architectures.
     """
+    tournament_name_dict = {"pca": "PCA", "ae_basic": "Basic_AE", "ae_layered": "Layered_AE"}
     scale_str = "scaled" if scaled else "unscaled"
+
     fig, axes = plt.subplots(
         nrows=len(row_keys),
         ncols=len(col_keys),
@@ -229,7 +248,7 @@ def plot_combined_comparison_grid(phase, scaled, theta_values, disease_values,
     # Extract base name for Tournament folder routing
     first_col = col_keys[0]
     base_name = first_col.split("H-")[1].split("_D-")[0] if "H-" in first_col else "standalone"
-    tournament_folder = f"Tournament_H-{base_name}"
+    tournament_folder = f"Tournament_H-{tournament_name_dict[base_name]}"
 
     # Setup continuous color bounds for Theta
     theta_array = np.array(theta_values, dtype=float)

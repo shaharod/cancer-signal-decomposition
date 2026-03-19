@@ -95,6 +95,18 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
 
         # Generate Global Comparison Grids
         for m in ["umap", "pca"]:
+            
+            lu.plot_combined_comparison_grid(
+                phase=phase, 
+                scaled=False, 
+                theta_values=test_df['theta_value'],     # Maps to the Magma colors
+                disease_values=test_df['disease_type'],  # Maps to the Shapes (Circles/Triangles)
+                row_keys=cfg.ENCODING_SIZES, 
+                col_keys=model_tags, 
+                method=m,
+                is_mixed=is_mixed 
+            )
+            
             lu.plot_combined_comparison_grid(
                 phase=phase, 
                 scaled=True, 
