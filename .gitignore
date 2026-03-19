@@ -5,7 +5,7 @@
 *.joblib
 *.json
 !best_meta.json  # Optional: Keep metadata if you want to track performance history
-outputs_old/
+archive/
 outputs/
 # --- Data Files ---
 # Exclude raw gene matrices and clinical data
