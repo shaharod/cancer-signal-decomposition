@@ -420,6 +420,113 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
         data_tag = "simple" if is_simple else "complex"
         plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
         plt.close(fig)
+     
+def analyze_disease_drivers_grid(labels_dict, inference_cache, test_df_full, test_genes_df, 
+                                 scale_bool, scaler, save_path, mode, top_n=10, is_mixed=False):
+    """
+    Evaluates Top Disease Drivers (Relative Compensation) in a grid layout.
+    Loops through available disease types and creates a separate grid figure for each.
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    gene_names = test_genes_df.columns.tolist()
+    
+    # Identify unique disease types in the dataset, excluding 0 (Healthy)
+    unique_diseases = [d for d in test_df_full['disease_type'].unique() if d != 0]
+    disease_map = {1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+    
+    # Outer Loop: Generate a separate figure for each disease type
+    for disease_target in unique_diseases:
+        disease_name = disease_map.get(disease_target, f"Disease {disease_target}")
+        
+        # Inner Loop: Generate grids per Base Architecture
+        for base_name, models in labels_dict.items():
+            n_rows = len(cfg.ENCODING_SIZES) 
+            n_cols = len(models)
+            
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows), squeeze=False)
+            fig.suptitle(f"Top Biological Drivers: {disease_name}\n"
+                         f"(Base: {base_name.upper()} | Top {top_n} Up/Down | Data: Unscaled)", 
+                         fontsize=16, fontweight='bold', y=0.98)
+            
+            for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
+                for col_idx, (model_label, folder_tag) in enumerate(models.items()):
+                    ax = axes[row_idx, col_idx]
+                    
+                    try:
+                        model_outputs = inference_cache[base_name][enc].get(model_label)
+                        if model_outputs is None or model_outputs['disease'] is None:
+                            ax.text(0.5, 0.5, "Model / Output Not Found", ha='center', color='red')
+                            continue
+                            
+                        recon_d_tensor = model_outputs['disease']
+                        recon_h_tensor = model_outputs['healthy']
+
+                        # Inverse Scaling (Mandatory for fold-change math)
+                        if scale_bool and scaler is not None:
+                            # inverse_scale takes a tensor, and returns a tensor. 
+                            recon_d_np = du.inverse_scale(scaler, recon_d_tensor).detach().cpu().numpy()
+                            recon_h_np = du.inverse_scale(scaler, recon_h_tensor).detach().cpu().numpy()
+                        else:
+                            # If no scaling is needed, just convert the tensors to NumPy directly
+                            recon_d_np = recon_d_tensor.detach().cpu().numpy()
+                            recon_h_np = recon_h_tensor.detach().cpu().numpy()
+                            
+
+                        # Mask for current disease
+                        is_target = (test_df_full['disease_type'] == disease_target).values
+                        cohort_recon_d = recon_d_np[is_target]
+                        cohort_recon_h = recon_h_np[is_target]
+                        
+                        if len(cohort_recon_d) == 0:
+                            ax.text(0.5, 0.5, "No Samples Found", ha='center')
+                            continue
+                            
+                        # Math: Compensation Score
+                        avg_d = cohort_recon_d.mean(axis=0)
+                        avg_h = cohort_recon_h.mean(axis=0)
+                        
+                        epsilon = 1.0 
+                        scores = avg_d / (avg_h + epsilon)
+                        
+                        # Extract Top Drivers
+                        df_features = pd.DataFrame({'Gene': gene_names, 'Score': scores})
+                        df_sorted = df_features.sort_values(by='Score', ascending=False)
+                        
+                        # Concat top positive and top negative, then sort for plotting
+                        top_features = pd.concat([df_sorted.head(top_n), df_sorted.tail(top_n)])
+                        top_features = top_features.sort_values(by='Score', ascending=True)
+                        
+                        # Plot onto specific ax
+                        colors = ['#d62728' if s < 0 else '#1f77b4' for s in top_features['Score']]
+                        ax.barh(top_features['Gene'], top_features['Score'], color=colors, edgecolor='black', linewidth=0.5)
+                        ax.axvline(0, color='black', linewidth=1.2)
+                        
+                        # Axis Clean-up
+                        ax.set_title(f"{model_label} (Enc: {enc})", fontsize=11)
+                        ax.tick_params(axis='y', labelsize=8) # Keep gene names readable
+                        
+                        if col_idx == 0:
+                            ax.set_ylabel("Gene Marker")
+                        if row_idx == n_rows - 1:
+                            ax.set_xlabel("Compensation Score: $Z_d / (Z_h + \epsilon)$")
+                            
+                    except Exception as e:
+                        traceback.print_exc()
+                        ax.text(0.5, 0.5, "Plotting Error", ha='center', color='red')
+
+            # 8. Save Figure
+            plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+            
+            # Use your established dynamic pathing
+            out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}"
+            os.makedirs(out_folder, exist_ok=True)
+            
+            # Format: save_path_scaled_Disease1.png
+            filename = f"{save_path}_{tag}_Disease{disease_target}.png"
+            plt.savefig(out_folder / filename, dpi=150)
+            plt.close(fig)
+            print(f"Saved: {filename}")
+
 
 def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path, mode, is_mixed=False, is_simple=False):
     """
@@ -434,7 +541,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
 
     _, true_disease = load_reconstruction_data('disease', mode) 
    
-    train_t, test_t, _, info = du.load_and_prep_tensors(
+    train_t, test_t, scaler, info = du.load_and_prep_tensors(
     phase="disease", mode=mode, scale_bool=scale_bool, is_mixed=is_mixed
     )
     test_df_full = info['test_df_full'].fillna(value=0.0)      # Contains [Genes | Theta | Type]
@@ -459,6 +566,21 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # ==========================================
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
+
+    print("🎨 Drawing Disease Drivers...")
+    analyze_disease_drivers_grid(
+        labels_dict=labels_dict,
+        inference_cache=inference_cache,
+        test_df_full=test_df_full,
+        test_genes_df=test_genes_df,
+        scale_bool=scale_bool,
+        scaler=scaler,               # Passed from du.load_and_prep_tensors
+        save_path=save_path+"_top_drivers",     # Prefix for the saved file
+        mode=mode,
+        top_n=10,  # Shows top 10 up and top 10 down per subplot
+        is_mixed=is_mixed                    
+    )
+    
     print("🎨 Drawing Disease Branch Scatter Plots...")
     analyze_disease_portion_reconstruction_scatter(
         labels_dict=labels_dict, 
@@ -500,15 +622,18 @@ def interpret_disease_mix(phase='disease', mode="true"):
             
         }
     }
-    print("################# running with mix") 
-    run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
-                                              scale_bool=UNSCALED, save_path="analyze_recon_mixed", 
-                                              mode=mode, is_mixed=MIXED)
-    print("############ running with no mix") 
-
-    run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
-                                              scale_bool=UNSCALED, save_path=f"analyze_recon_dOnly", 
-                                         mode=mode, is_mixed=NOT_MIXED)
+    for scale in cfg.SCALING_OPTIONS:
+        scaling = "scaled" if scale else "unscaled"
+        print(f"####### RUNNING WITH {scaling.upper()} DATA")
+        print("################# running with mix") 
+        run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
+                                                scale_bool=scale, save_path="analyze_recon_mixed", 
+                                                mode=mode, is_mixed=MIXED)
+        
+        print("############ running with no mix") 
+        run_comprehensive_reconstruction_analysis(labels_dict=labels_dict, 
+                                                scale_bool=scale, save_path=f"analyze_recon_dOnly", 
+                                            mode=mode, is_mixed=NOT_MIXED)
 
 
 

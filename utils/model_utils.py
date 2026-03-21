@@ -12,11 +12,11 @@ def create_load_mix_model(folder_tag, test_set, gene_size, enc, scale_tag):
     is_pca = "pca" in d_type.lower()
     is_mix = "mix" in folder_tag
     if is_mix:
-        h_model = ModelFactory.create_model(h_type, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
-        d_model = ModelFactory.create_model(d_type, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
+        h_model = ModelFactory.create_model(h_type, gene_size, enc, cfg.H1, cfg.H2, scale_bool)
+        d_model = ModelFactory.create_model(d_type, gene_size, enc, cfg.H1, cfg.H2, scale_bool)
         model = ModelFactory.create_mix_model(h_model, d_model)
     else:
-        model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2, scale_tag)
+        model = ModelFactory.create_model(folder_tag, gene_size, enc, cfg.H1, cfg.H2, scale_bool)
     # print(f"curr model is {h_and_d} and has:\n {model}")        
     ext = "model.joblib" if is_pca else "model.pt"
     model_path = cfg.get_path('disease', scale_tag, folder_tag, enc, cfg.MODELS_SUBFOLDER, is_mixed=True) / ext
