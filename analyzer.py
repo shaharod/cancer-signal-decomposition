@@ -124,7 +124,7 @@ def analyze_disease_mix(is_mixed, phase='disease'):
         
         ## with pca train/test vals too
         pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=True, zoom_params=zoom)    # <--- No zoom
-
+        
         pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, f'MSE Performance: H-{baseline}', f'mse_line_comparison_H-{baseline}.png', group_save_path)
 
         pu.plot_comprehensive_comparison_bars(
@@ -164,7 +164,7 @@ def analyze_healthy_model(phase='healthy'):
     
     ## with pca train/test vals too
     pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=zoom)    # <--- No zoom
-
+    
     pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, 'Healthy Model Performance', 'mse_line_comparison.png', save_path)
     pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",
                                                           save_path="final_architecture_vs_scaling_bars.png",
