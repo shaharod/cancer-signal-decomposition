@@ -368,11 +368,11 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
                     benchmark_truth = test_truth_d.fillna(test_truth_h)
                     if scale_bool and scaler is not None:
                         recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
-                        input_final = scaler.inverse_transform(benchmark_truth.values)   
+                        # input_final = scaler.inverse_transform(benchmark_truth.values)   
                     else:
                         recon_final = recon_d.detach().cpu().numpy()
-                        input_final = benchmark_truth.values
-                    flat_input = input_final.flatten()
+                        # input_final = benchmark_truth.values
+                    flat_input = benchmark_truth.values.flatten()
                     flat_recon = recon_final.flatten()
                     
                     # Route to the correct plot type
@@ -580,20 +580,23 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
 
-    print("🎨 Drawing Disease Drivers...")
-    analyze_disease_drivers_grid(
-        labels_dict=labels_dict,
-        inference_cache=inference_cache,
-        test_df_full=test_df_full,
-        test_genes_df=test_genes_df,
-        scale_bool=scale_bool,
-        scaler=scaler,               # Passed from du.load_and_prep_tensors
-        save_path=save_path+"_top_drivers",     # Prefix for the saved file
-        mode=mode,
-        top_n=10,  # Shows top 10 up and top 10 down per subplot
-        is_mixed=is_mixed                    
+    
+    print("🎨 Drawing Total Mix Scatter Plots...")
+    analyze_total_reconstruction(
+        labels_dict=labels_dict, 
+        inference_cache=inference_cache, 
+        test_df_full=test_df_full, 
+        test_n_theta=test_no_theta_t,
+        gene_size=actual_gene_size, 
+        scaler=scaler,
+        scale_bool=scale_bool, 
+        save_path=save_path+"_total", 
+        mode=mode, 
+        is_simple=is_simple, 
+        is_mixed=is_mixed
     )
     
+
     print("🎨 Drawing Disease Branch Scatter Plots...")
     analyze_disease_portion_reconstruction_scatter(
         labels_dict=labels_dict, 
@@ -609,20 +612,18 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         ,
         is_mixed=is_mixed
     )
-    
-    print("🎨 Drawing Total Mix Scatter Plots...")
-    analyze_total_reconstruction(
-        labels_dict=labels_dict, 
-        inference_cache=inference_cache, 
-        test_df_full=test_df_full, 
-        test_n_theta=test_no_theta_t,
-        gene_size=actual_gene_size, 
-        scaler=scaler,
-        scale_bool=scale_bool, 
-        save_path=save_path+"_total", 
-        mode=mode, 
-        is_simple=is_simple, 
-        is_mixed=is_mixed
+    print("🎨 Drawing Disease Drivers...")
+    analyze_disease_drivers_grid(
+        labels_dict=labels_dict,
+        inference_cache=inference_cache,
+        test_df_full=test_df_full,
+        test_genes_df=test_genes_df,
+        scale_bool=scale_bool,
+        scaler=scaler,               # Passed from du.load_and_prep_tensors
+        save_path=save_path+"_top_drivers",     # Prefix for the saved file
+        mode=mode,
+        top_n=10,  # Shows top 10 up and top 10 down per subplot
+        is_mixed=is_mixed                    
     )
     
     print("✅ All analyses and visualizations complete!\n")

@@ -440,7 +440,7 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                             ax.axhline(y=p_train, color=pca_style['color'], linestyle='-', alpha=0.6, label="PCA Train")
                         if p_eval is not None:
                             ax.axhline(y=p_eval, color=pca_style['color'], linestyle='--', alpha=0.6, label="PCA Eval")
-
+                
                 # Zoom Logic (Only if zoom_params is not None)
                 if zoom_params:
                     last_n = zoom_params.get('last_n_epochs', 0)
@@ -460,10 +460,10 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                 ax.legend(loc='upper right', fontsize='x-small')
 
         plt.tight_layout()
-        
+        zoom_str = "zoomed" if zoom_params else ""
         # Save file
         os.makedirs(folder_path, exist_ok=True)
-        filename = f"{save_name}_{model_key}.png"
+        filename = f"{save_name}_{model_key}_{zoom_str}.png"
         plt.savefig(os.path.join(folder_path, filename), bbox_inches='tight', dpi=150)
         plt.close()
 
