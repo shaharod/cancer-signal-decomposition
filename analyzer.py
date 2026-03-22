@@ -114,16 +114,16 @@ def analyze_disease_mix(is_mixed, phase='disease'):
 
         zoom = {
             'last_n_epochs': 300,
-            'ylim_top': None
+            'ylim_top': 110
         }
 
         # generating plots once per baseline
         print(f"Generating Group Plots for: {baseline}")
 
-        pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=False, zoom_params=None)    # <--- No zoom
+        # pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=False, zoom_params=zoom)    # <--- No zoom
         
         ## with pca train/test vals too
-        pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=True, zoom_params=None)    # <--- No zoom
+        pu.plot_train_eval_curves(data_s, data_u, save_name=f'tournament_H-{baseline}', folder_path=group_save_path, include_pca=True, zoom_params=zoom)    # <--- No zoom
 
         pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, f'MSE Performance: H-{baseline}', f'mse_line_comparison_H-{baseline}.png', group_save_path)
 
@@ -150,7 +150,7 @@ def analyze_healthy_model(phase='healthy'):
 
     zoom = {
         'last_n_epochs': 100, 
-        'ylim_top': 1000     # Adjust this value based on your typical final MSE
+        'ylim_top': 100     # Adjust this value based on your typical final MSE
     }
 
     # getting data and path
@@ -160,10 +160,10 @@ def analyze_healthy_model(phase='healthy'):
 
     # plotting
                 ## Sarina plot additions ##
-    pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
+    # pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=False, zoom_params=None)    # <--- No zoom
     
     ## with pca train/test vals too
-    pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=None)    # <--- No zoom
+    pu.plot_train_eval_curves(data_s, data_u, save_name='healthy_train_history', folder_path=save_path, include_pca=True, zoom_params=zoom)    # <--- No zoom
 
     pu.plot_test_mse_comparison_lines(data_s, data_u, cfg.ENCODING_SIZES, 'Healthy Model Performance', 'mse_line_comparison.png', save_path)
     pu.plot_comprehensive_comparison_bars(data_s, data_u, cfg.ENCODING_SIZES, title="Performance Tournament: Scaled vs Raw Pipeline (Original Units)",

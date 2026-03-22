@@ -230,7 +230,7 @@ def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
                     
     return cache
 
-def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, test_n_theta, gene_size, scale_bool, save_path, mode, is_simple=False, is_mixed=False):
+def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, test_n_theta, gene_size, scaler, scale_bool, save_path, mode, is_simple=False, is_mixed=False):
     """
     Evaluates the Total Mix Reconstruction (recon_mix) using pre-computed inference cache.
     Colors the complex data dynamically based on available classes.
@@ -266,11 +266,18 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, tes
                         ax.text(0.5, 0.5, "Model / Output Not Found", ha='center', color='red')
                         continue
                         
-                    recon_mix = model_outputs['mix']
-                        
+                    recon_mix_t = model_outputs['mix']
+                    
+                    if scale_bool and scaler is not None:
+                        recon_mix = du.inverse_scale(scaler, recon_mix_t).detach().cpu().numpy()
+                        #inverse scale the input too
+                        input_final = du.inverse_scale(scaler, test_n_theta).detach().cpu().numpy()
+                    else:
+                        recon_mix = recon_mix_t.detach().cpu().numpy()
+                        input_final = test_n_theta.numpy()
                     # Flatten the data for scatter
-                    flat_input = test_n_theta.flatten().numpy()
-                    flat_recon = recon_mix.detach().cpu().numpy().flatten()
+                    flat_input = input_final.flatten()
+                    flat_recon = recon_mix.flatten()
                     
                     # Route to correct plot
                     if is_simple:
@@ -319,10 +326,10 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, tes
         os.makedirs(out_folder, exist_ok=True)
 
         data_tag = "simple" if is_simple else "complex"
-        plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}_total_recon_scatter.png", dpi=150)
+        plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
         plt.close(fig)
 
-def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache, test_df_full, true_disease_input, scale_bool, gene_size, save_path, mode, is_simple=False, is_mixed=False):
+def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache, test_df_full, true_disease_input, scaler, scale_bool, gene_size, save_path, mode, is_simple=False, is_mixed=False):
     """
     Evaluates Disease Branch Reconstruction using pre-computed inference cache.
     Dynamically switches between Boxplots and Scatter plots based on is_simple.
@@ -359,8 +366,14 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
                     test_truth_d = true_disease_input.reindex(test_df_full.index)
                     test_truth_h = true_healthy.reindex(test_df_full.index)
                     benchmark_truth = test_truth_d.fillna(test_truth_h)
-                    flat_input = benchmark_truth.values.flatten()
-                    flat_recon = recon_d.detach().cpu().numpy().flatten()
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
+                        input_final = scaler.inverse_transform(benchmark_truth.values)   
+                    else:
+                        recon_final = recon_d.detach().cpu().numpy()
+                        input_final = benchmark_truth.values
+                    flat_input = input_final.flatten()
+                    flat_recon = recon_final.flatten()
                     
                     # Route to the correct plot type
                     if is_simple:
@@ -587,6 +600,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         inference_cache=inference_cache, 
         test_df_full=test_df_full, 
         true_disease_input=true_disease, 
+        scaler=scaler,
         scale_bool=scale_bool, 
         gene_size=actual_gene_size,
         save_path=save_path+"_disease", 
@@ -603,6 +617,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         test_df_full=test_df_full, 
         test_n_theta=test_no_theta_t,
         gene_size=actual_gene_size, 
+        scaler=scaler,
         scale_bool=scale_bool, 
         save_path=save_path+"_total", 
         mode=mode, 

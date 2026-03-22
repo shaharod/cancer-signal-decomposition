@@ -42,11 +42,11 @@ class UniversalMixModel(nn.Module):
         x_hat_mix = (theta * x_hat_d) + ((1 - theta) * x_hat_h)
         # --- DEBUG PRINT: HEALTHY SAMPLE RECONSTRUCTION ---
         # Find indices where theta is exactly 0
-        healthy_indices = (theta == 0).nonzero(as_tuple=True)[0]
+        # healthy_indices = (theta == 0).nonzero(as_tuple=True)[0]
 
-        if healthy_indices.numel() > 0:
-            # Pick the first healthy sample found in this batch
-            idx = healthy_indices[0]
+        # if healthy_indices.numel() > 0:
+        #     # Pick the first healthy sample found in this batch
+        #     idx = healthy_indices[0]
             
             # print(f"\n--- [DEBUG] Internal Values for Healthy Sample (Index {idx}) ---")
             # print(f"Theta: {theta[idx].item()}")
