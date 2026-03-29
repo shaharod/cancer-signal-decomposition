@@ -69,17 +69,25 @@ def choose_enc_layers():
         return [16, 32, 64, 128], 512, 128
     else:
         return [8, 16], 32, 16
-    
+
 ENCODING_SIZES, H1, H2 = choose_enc_layers() 
 
-
+def get_theta_path(mode):
+    """
+    getter for theta path, if real data or synthetic with unif theta we send mode 'real' 
+    """
+    match mode:
+        case 'real': return DATA_SUB / "theta_values.csv"
+        case 'fixed': return DATA_SUB /"theta_values05"
+        case _: raise ValueError("what mode are we at and why do we not have the matching theta path")
+    
 # # old Layered AE architecture settings
 # ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
 # H1 = 512 if not SYNTHETIC_DATA else 32
 # H2 = 128 if not SYNTHETIC_DATA else 16
 
 # ---- Tournament Logic Helpers ----
-SCALING_OPTIONS = [True, False]
+SCALING_OPTIONS = [False]
 MODEL_TYPES     = ['ae_basic', 'ae_layered']
 SIG_LIST        = ['Megakaryocyte', 'Neutrophils']
 
