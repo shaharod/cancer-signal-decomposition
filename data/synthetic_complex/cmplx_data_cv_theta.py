@@ -247,7 +247,7 @@ def apply_sequencing_noise(clean_matrix):
 
 # %%
 n_mix = n_disease_A_samples ##NOTE for now its fine, num of A and B samples is the same
-theta_noise_std = 0.001 #NOTE val changes between theta runs (0.001, 0.005, 0.01)
+theta_noise_std = 0.01 #NOTE val changes between theta runs (0.001, 0.005, 0.01)
 
 # mix disease A
 true_thetas_A = np.random.uniform(0,1,n_mix)

@@ -111,20 +111,20 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     if theta_path:
         # Combined DF with theta as last column
         # df_genes['theta_value'] = df_theta.iloc[:, 0]
-        if mode == 'random':
-            print(">>> [EXPERIMENT] Overwriting real thetas with rnad values U(0,1)")
-            df_genes['theta_value'] = np.random.rand(len(df_genes))
-        elif mode == 'fixed':
-            print(">>> [EXPERIMENT] Overwriting real thetas with fixed 0.5 values U(0,1)")
-            df_genes['theta_value'] = 0.5 # Every sample is a "perfect mix"
-        else:
-            print("real thetas are used")
+        if mode in ["fixed", "real"]:
             df_theta = pd.read_csv(theta_path, index_col=0)
+            print(f"theta {mode} used from path {theta_path}")
             # Align indices
             common_idx = df_genes.index.intersection(df_theta.index)
             df_genes = df_genes.loc[common_idx]
             df_theta = df_theta.loc[common_idx]
             df_genes['theta_value'] = df_theta.iloc[:, 0] # True values
+
+        elif mode == 'random':
+            print(">>> [EXPERIMENT] Overwriting real thetas with rnad values U(0,1)")
+            df_genes['theta_value'] = np.random.rand(len(df_genes))
+        else:
+            raise ValueError("what mode are we at and why did we not read path well")
 
     else:
         # Healthy data: Add a column of zeros for theta
