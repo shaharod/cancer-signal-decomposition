@@ -18,7 +18,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         if is_mixed:
             df_healthy = data_utils.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
             # 2. Load Disease Data (Theta > 0)
-            df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.THETA_PATH, mode=mode_val) #cfg.DISEASE_GENES_PATH
+            df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.get_theta_path(mode_val), mode=mode_val) #cfg.DISEASE_GENES_PATH
             
             # 3. Concatenate 
             df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
@@ -37,7 +37,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             train_d, test_d, scaler = data_utils.get_ready_tensors(
                 disease_gene_path,
                 split_path=cfg.get_split_path("disease", tag, is_mixed), use_scaling=scale,
-                theta_path=cfg.THETA_PATH,
+                theta_path=cfg.get_theta_path(mode_val),
                 mode=mode_val,
                 phase="disease",
                 is_mixed=is_mixed,

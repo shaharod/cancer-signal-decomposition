@@ -76,6 +76,8 @@ def get_theta_path(mode):
     """
     getter for theta path, if real data or synthetic with unif theta we send mode 'real' 
     """
+    if not SYNTHETIC_DATA:
+        raise ValueError("Didnt fix yet for file of real data")
     match mode:
         case 'real': return DATA_SUB / "theta_values.csv"
         case 'fixed': return DATA_SUB /"theta_values05"

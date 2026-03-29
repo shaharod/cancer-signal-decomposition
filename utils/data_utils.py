@@ -8,23 +8,6 @@ import json
 from sklearn.preprocessing import StandardScaler
 import config as cfg
 
-def fit_and_scale2(train_df, test_df):
-    """Scaler fitted only on training genes."""
-    scaler = StandardScaler()
-    # Remove theta and disease type if there is before scaling
-    
-    train_genes = train_df.drop(columns=['theta_value'])
-    test_genes = test_df.drop(columns=['theta_value'])
-    
-    train_scaled = scaler.fit_transform(train_genes)
-    test_scaled = scaler.transform(test_genes)
-    
-    return (
-        torch.tensor(train_scaled, dtype=torch.float32),
-        torch.tensor(test_scaled, dtype=torch.float32),
-        scaler
-    )
-
 def get_scaler_path(phase, is_mixed=False, theta=""):
     """
     Forces the scaler to be shared across all theta-experiments 
@@ -61,10 +44,10 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
     consistency across different theta-experiments.
     """
     scaler_path = get_scaler_path(phase, is_mixed, theta)
-    
+    cols_to_drop = [col for col in train_df.columns if 'theta' in col]
     # We must drop theta so the scaler doesn't treat it as a gene feature
-    train_genes = train_df.drop(columns=['theta_value'])
-    test_genes = test_df.drop(columns=['theta_value'])
+    train_genes = train_df.drop(columns=cols_to_drop)
+    test_genes = test_df.drop(columns=cols_to_drop)
     
     scaler = None
 
@@ -107,6 +90,13 @@ def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
     """
     patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
     return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
+
+def get_theta_cols(train_df, test_df):
+    theta_cols = [col for col in train_df.columns if 'theta' in col]
+    # Separate genes from theta
+    train_theta = torch.tensor(train_df[theta_cols].values, dtype=torch.float32)
+    test_theta = torch.tensor(test_df[theta_cols].values, dtype=torch.float32)
+    return train_theta, test_theta
 
 def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     """
@@ -159,7 +149,7 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
         df_target = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
     else:
         # Disease case (might be mixed with healthy)
-        df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.THETA_PATH, mode=mode)
+        df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.get_theta_path(mode), mode=mode)
         
         if is_mixed:
             df_h = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
@@ -186,8 +176,7 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
         return train_t, test_t, None, info_dict
 
     # Separate genes from theta for scaling
-    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
-    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    train_theta, test_theta = get_theta_cols(train_df, test_df)
     
     # Scale only the genes via the smart fit_and_scale
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(
@@ -253,6 +242,7 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     """
     Final Pipeline: Align -> Split -> Scale -> Tensor.
     Returns: (train_tensor, test_tensor, scaler)
+    Used when we load the data too before readying the tensors
     """
 
     df_full = prepare_and_align_data(gene_path, theta_path, mode=mode)
@@ -268,18 +258,22 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
         return train_t, test_t, None
     
     # Separate genes from theta
-    dropped_cols_train = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
-    dropped_cols_test = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    train_theta, test_theta = get_theta_cols(train_df, test_df)
+
     
     # Scale only the genes
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
     
     # Combine back to [Genes | Theta]
-    train_tensor = torch.cat([train_genes_scaled, dropped_cols_train], dim=1)
-    test_tensor = torch.cat([test_genes_scaled, dropped_cols_test], dim=1)
+    train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
     
 def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", is_mixed=False, theta=""):
+    """
+    function used when we had to fix df data beforehand (like when combining the healthy and disease)
+    so we just pass the df without needing to load them
+    """
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
     test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
@@ -289,9 +283,8 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", i
         test_t = torch.tensor(test_df.values, dtype=torch.float32)
         return train_t, test_t, None
     
-    # Separate genes from theta
-    train_theta = torch.tensor(train_df[['theta_value']].values, dtype=torch.float32)
-    test_theta = torch.tensor(test_df[['theta_value']].values, dtype=torch.float32)
+    train_theta, test_theta = get_theta_cols(train_df, test_df)
+    
     
     # Scale only the genes
     train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
@@ -301,65 +294,3 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", i
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
 
-def fix_df_data(scale_bool, mode, is_mixed):
-    """
-    function to deal with disease data, it returns split data with theta, without disease type
-    """
-    tag = "scaled" if scale_bool else "unscaled"
-    
-    # 1. Load the core Disease Data
-    df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.THETA_PATH, mode=mode)
-    
-    if is_mixed:
-        # Scenario A: Mixed Dataset (Healthy + Disease)
-        df_h = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
-        df_target = pd.concat([df_h, df_d]) #.sample(frac=1, random_state=42)
-    else:
-        # Scenario B: Disease Samples Only
-        df_target = df_d
-    
-    # 2. Get the correct split path based on the is_mixed flag
-    tournament_split_path = cfg.get_split_path(
-        phase="disease", 
-        scale_tag=tag, 
-        is_mixed=is_mixed # This ensures you use the correct split file
-    )
-    
-    # 3. Get the train/test split
-    train_df, test_df = get_split_data(df_target, split_path=tournament_split_path)
-
-    train_df = train_df.drop(columns=['disease_type'], errors='ignore')
-    test_df = test_df.drop(columns=['disease_type'], errors='ignore')
-    
-    return train_df, test_df
-
-# def update_sample_metadata(log_path, gene_path, train_df, test_df, mode):
-    """
-    Saves counts into a single JSON file.
-    Key: Filename + Mode
-    """
-    # Get just the filename (e.g., 'BRCA_data' from 'path/to/BRCA_data.csv')
-    dataset_name = os.path.splitext(os.path.basename(gene_path))[0]
-    entry_key = f"{dataset_name}_{mode}"
-
-    stats = {}
-    if os.path.exists(log_path):
-        with open(log_path, "r") as f:
-            stats = json.load(f)
-
-    # Calculate Healthy vs Disease based on theta_value
-    # (Assuming 0 is healthy, >0 is disease)
-    total_df = pd.concat([train_df, test_df])
-    healthy_count = int((total_df['theta_value'] == 0).sum())
-    disease_count = int((total_df['theta_value'] > 0).sum())
-
-    stats[entry_key] = {
-        "Train": len(train_df),
-        "Test": len(test_df),
-        "Healthy": healthy_count,
-        "Disease": disease_count,
-        "Total": len(total_df)
-    }
-
-    with open(log_path, "w") as f:
-        json.dump(stats, f, indent=4)
