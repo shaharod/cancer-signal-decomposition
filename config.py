@@ -10,6 +10,9 @@ DATA_PATH = PROJECT_ROOT / 'data'
 RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = False
 SYNTHETIC_DATA = True
+SYN_HP = False
+SYN_DP = True
+SYN_1T = False
 SYN_SIMPLE = False
 SYN_CMPLX = not SYN_SIMPLE
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
@@ -105,8 +108,13 @@ PLOTS_SUBFOLDER = 'plots'
 # base
 BASE_EXP_DIR = PROJECT_ROOT / 'outputs' / ('synthetic_experiments' if SYNTHETIC_DATA else 'real_experiments')
 if SYNTHETIC_DATA:
-    suffix = "_simple" if SYN_SIMPLE else "_cmplx"
-
+    suffix = "_"
+    if SYN_1T:
+        suffix = suffix + "0.1t"
+    elif SYN_DP:
+        suffix = suffix + "dif_dp"
+    elif SYN_HP:
+        suffix = suffix + "dif_hp"
     BASE_EXP_DIR = BASE_EXP_DIR.with_name(BASE_EXP_DIR.name + suffix)
     
 # sub-folders types
