@@ -11,8 +11,11 @@ RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = False
 SYNTHETIC_DATA = True
 SYN_HP = False
-SYN_DP = True
+SYN_DP = False
 SYN_1T = False
+SYN_01T = True
+SYN_001T = False
+SYN_005T = False
 SYN_SIMPLE = False
 SYN_CMPLX = not SYN_SIMPLE
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
@@ -44,6 +47,15 @@ else:
         DATA_SUB = DATA_SUB / 'synthetic_simple'
     elif SYN_CMPLX:
         DATA_SUB = DATA_SUB / 'synthetic_complex'
+    
+    if SYN_001T:
+        DATA_SUB = DATA_SUB / '0.001t'
+    elif SYN_005T:
+        DATA_SUB = DATA_SUB / '0.005t'
+    elif SYN_01T:
+        DATA_SUB = DATA_SUB / '0.01t'
+    elif SYN_1T:
+        DATA_SUB = DATA_SUB / '0.1t'
 
 
 if SYNTHETIC_DATA:
@@ -70,7 +82,7 @@ EPOCH_JUMP     = 5
 def choose_enc_layers():
     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
         # return [16, 32, 64, 128], 512, 128
-        return [2, 4, 8, 16], 512, 64
+        return [2, 4, 8], 512, 64
     else:
         return [8, 16], 32, 16
 
@@ -110,7 +122,13 @@ BASE_EXP_DIR = PROJECT_ROOT / 'outputs' / ('synthetic_experiments' if SYNTHETIC_
 if SYNTHETIC_DATA:
     suffix = "_"
     if SYN_1T:
-        suffix = suffix + "0.1t"
+        suffix = suffix + "theta_0.1"
+    elif SYN_01T:
+        suffix = suffix + "theta_0.01"
+    elif SYN_001T:
+        suffix = suffix + "theta_0.001"
+    elif SYN_005T:
+        suffix = suffix + "theta_0.005"
     elif SYN_DP:
         suffix = suffix + "dif_dp"
     elif SYN_HP:
