@@ -1,7 +1,12 @@
-# setup
+# %% [markdown]
+# # setup
+
+# %%
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+
+# %%
 def scatter(a, b, log=False, log10=False, diag=True, ma=0, ax=None, c='black', s=1,
             label=None, alpha=1, aspect=False, cmap=None, return_scat_obj=False, args={}):
     # Scatters a vs b of ax (default plt). Can apply:
@@ -100,11 +105,17 @@ def show(title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, aspect=Fals
     if savepdf and figname is not None: fig.savefig(figname.parent/f'{figname.name}.pdf')
     if showfig: plt.show()
     else: fig.clf()
-# Loading data
-### Resolving Path issue
+
+
+# %% [markdown]
+# # Loading data
+
+# %% [markdown]
+# ### Resolving Path issue
+
+# %%
 from pathlib import Path
 
-# samples files
 script_dir = Path(__file__).resolve().parent
 # samples files
 # healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
@@ -124,7 +135,11 @@ theta_A_path = (script_dir / '../../data/real/theta_CRC_passedQC.csv').resolve()
 theta_B_path = (script_dir / '../../data/real/SCLC_theta.csv').resolve()
 
 print(f'{healthy_path}')
-### Load read data
+
+# %% [markdown]
+# ### Load read data
+
+# %%
 import pandas as pd
 
 
@@ -136,7 +151,11 @@ df_real_cancerB = pd.read_csv(diseaseB_path, index_col=0)
 # loading thetas
 metadata_A = pd.read_csv(theta_A_path)
 metadata_B = pd.read_csv(theta_B_path)
-# Creating Profiles
+
+# %% [markdown]
+# # Creating Profiles
+
+# %%
 # average healthy data
 blueprint_healthy = df_real_healthy.mean(axis=1).values
 print(blueprint_healthy)
@@ -162,7 +181,11 @@ print(f"blueprint DiseaseB sum is: {blueprint_B_mixed.sum()}")
 
 print(f"BlueprintAMixed is {blueprint_A_mixed} with shape {blueprint_A_mixed.shape}")
 print(f"BlueprintBMixed is {blueprint_B_mixed} with shape {blueprint_B_mixed.shape}")
-### Isolting Cancer
+
+# %% [markdown]
+# ### Isolting Cancer
+
+# %%
 # isolating disease A
 pure_disease_A = (blueprint_A_mixed - (1 - theta_A) * blueprint_healthy) / theta_A
 pure_disease_A = pure_disease_A.clip(min=0)
@@ -172,13 +195,16 @@ pure_disease_B = (blueprint_B_mixed - (1 - theta_B) * blueprint_healthy) / theta
 pure_disease_B = pure_disease_B.clip(min=0)
 
 print("Successfully isolated pure Disease A and Disease B profiles.")
-### Pure datasets
+
+# %% [markdown]
+# ### Pure datasets
+
+# %%
 n_genes = len(blueprint_healthy)
-if not (n_genes==len(pure_disease_A)) or not (n_genes==len(pure_disease_B)):
-    raise ValueError()
 n_healthy_samples = 300
 n_disease_A_samples = 200
 n_disease_B_samples = 200
+## stabilising cv for changing variance/std according to sample vals
 bio_cv = 0.1
 healthy_std = bio_cv * blueprint_healthy
 diseaseA_std = bio_cv * pure_disease_A
@@ -186,21 +212,22 @@ diseaseB_std = bio_cv * pure_disease_B
 total_healthy_needed = n_healthy_samples + n_disease_A_samples + n_disease_B_samples
 
 healthy_pool = np.random.normal(
-    blueprint_healthy[:, None], healthy_std, size=(n_genes, total_healthy_needed)
+    blueprint_healthy[:, None], healthy_std[:, None], size=(n_genes, total_healthy_needed)
 ).clip(min=0)
 
 disease_A_pool = np.random.normal(
-    pure_disease_A[:, None], diseaseA_std, size=(n_genes, n_disease_A_samples)
+    pure_disease_A[:, None], diseaseA_std[:, None], size=(n_genes, n_disease_A_samples)
 ).clip(min=0)
 
 disease_B_pool = np.random.normal(
-    pure_disease_B[:, None], diseaseB_std, size=(n_genes, n_disease_B_samples)
+    pure_disease_B[:, None], diseaseB_std[:, None], size=(n_genes, n_disease_B_samples)
 ).clip(min=0)
-
 pure_healthy_data = healthy_pool[:, :n_healthy_samples]
 
 
 print(f"Pools created: Healthy ({healthy_pool.shape}), Disease A ({disease_A_pool.shape}), Disease B ({disease_B_pool.shape})")
+
+# %%
 def apply_sequencing_noise(clean_matrix):
     """
     Func to apply poisson technical noise. Does so by anchoring the variance to sequencing depth (0.5M to 5M).
@@ -216,36 +243,56 @@ def apply_sequencing_noise(clean_matrix):
     
     # Normalize back to stabilize the variance
     return raw_synthetic_counts / scaling_factors ## normalize by the scaling factor
-
 # # Mixing
+
+# %%
 n_mix = n_disease_A_samples ##NOTE for now its fine, num of A and B samples is the same
+theta_noise_std = 0.01 #NOTE val changes between theta runs (0.001, 0.005, 0.01)
 
 # mix disease A
-thetas_A = np.random.uniform(0,1,n_mix)
+true_thetas_A = np.random.uniform(0,1,n_mix)
+# given_thetas_A = np.clip(
+#     true_thetas_A + np.random.normal(0, theta_noise_std, n_mix),
+#     0.0,
+#     1.0
+# )
+given_thetas_A = np.random.uniform(0,1,n_mix)
 healthy_data_samples_A = healthy_pool[:, n_healthy_samples:n_healthy_samples+n_mix] # healthy bio noisy parts for A samples
 
-mixed_A_clean = (1 - thetas_A) * healthy_data_samples_A + thetas_A * disease_A_pool # clean := no sample/tech noise
+mixed_A_clean = (1 - true_thetas_A) * healthy_data_samples_A + true_thetas_A * disease_A_pool # clean := no sample/tech noise
 
 # mix disease B
-thetas_B = np.random.uniform(0, 1, n_mix)
+true_thetas_B = np.random.uniform(0, 1, n_mix)
+# given_thetas_B = np.clip(
+#     true_thetas_B + np.random.normal(0, theta_noise_std, n_mix),
+#     0.0,
+#     1.0
+# )
+given_thetas_B = np.random.uniform(0,1,n_mix)
 healthy_data_samples_B = healthy_pool[:, n_mix + n_healthy_samples:]
-
-mixed_B_clean = (1 - thetas_B) * healthy_data_samples_B + thetas_B * disease_B_pool
+mixed_B_clean = (1 - true_thetas_B) * healthy_data_samples_B + true_thetas_B * disease_B_pool
 
 print(f"Created mixtures. Mix A shape: {mixed_A_clean.shape}, Mix B shape: {mixed_B_clean.shape}")
 print(f"healthy data samples: {healthy_data_samples_A.shape}")
+print(f"Theta noise std: {theta_noise_std}")
+print(f"A mean abs theta shift: {np.mean(np.abs(given_thetas_A - true_thetas_A)):.4f}")
+print(f"B mean abs theta shift: {np.mean(np.abs(given_thetas_B - true_thetas_B)):.4f}")
+
 
 ## applying tech noise
 final_mixed_A = apply_sequencing_noise(mixed_A_clean)
 final_mixed_B = apply_sequencing_noise(mixed_B_clean)
 final_healthy = apply_sequencing_noise(pure_healthy_data)
-## Saving
+# %% [markdown]
+# ## Saving
+
+# %%
 
 df_healthy = pd.DataFrame(final_healthy, index=df_real_healthy.index, 
                           columns=[f'Healthy-Sample{i}' for i in range(pure_healthy_data.shape[1])])
 df_healthy.to_csv('healthy_data.csv')
 
-# 3. Save Pure Disease Profiles
+# if we save Pure Disease Profiles
 df_pure_A = pd.DataFrame(disease_A_pool, index=df_real_healthy.index, 
                          columns=[f'DiseaseA-Sample{i}' for i in range(disease_A_pool.shape[1])])
 # df_pure_A.to_csv('pure_disease_A.csv')
@@ -254,24 +301,27 @@ df_pure_B = pd.DataFrame(disease_B_pool, index=df_real_healthy.index,
                          columns=[f'DiseaseB-Sample{i}' for i in range(disease_B_pool.shape[1])])
 # df_pure_B.to_csv('pure_disease_B.csv')
 
-# 4. Save Mixed Data A and its Theta values
+# if we save Mixed Data and its Theta values separate
 df_mixed_A = pd.DataFrame(final_mixed_A, index=df_real_healthy.index, 
                           columns=[f'DiseaseA-Sample{i}' for i in range(final_mixed_A.shape[1])])
 # df_mixed_A.to_csv('mixed_data_A.csv')
 # pd.Series(thetas_A, name='Theta').to_csv('mixed_A_thetas.csv', index=False)
 
-# 5. Save Mixed Data B and its Theta values
 df_mixed_B = pd.DataFrame(final_mixed_B, index=df_real_healthy.index, 
                           columns=[f'DiseaseB-Sample{i}' for i in range(final_mixed_B.shape[1])])
 # df_mixed_B.to_csv('mixed_data_B.csv')
 # pd.Series(thetas_B, name='Theta').to_csv('mixed_B_thetas.csv', index=False)
 
 # print(f"All components saved")
-# SAVE COMBINED DATASETS
 
-labels_A = np.ones(len(thetas_A), dtype=int)
-labels_B = np.full(len(thetas_B), 2, dtype=int)
-all_labels = np.concatenate([labels_A, labels_B])
+# %% [markdown]
+# SAVE COMBINED DATASETS
+#
+
+# %%
+given_labels_A = np.ones(len(given_thetas_A), dtype=int)
+given_labels_B = np.full(len(given_thetas_B), 2, dtype=int)
+given_all_labels = np.concatenate([given_labels_A, given_labels_B])
 
 ## save one combined csv of the pure disease truth of each disease sample (a and b)
 combined_pure_df = pd.concat([df_pure_A, df_pure_B], axis=1)
@@ -279,35 +329,54 @@ combined_pure_df.to_csv("pure_disease_truth.csv")
 print(combined_pure_df.shape)
 
 ## save theta values of all disease samples in one file
-all_thetas = np.concatenate([thetas_A, thetas_B])
+given_all_thetas = np.concatenate([given_thetas_A, given_thetas_B])
+true_all_thetas = np.concatenate([true_thetas_A, true_thetas_B])
 
 # Extract the exact sample names you generated earlier to ensure perfect alignment
 sample_names = list(df_mixed_A.columns) + list(df_mixed_B.columns)
 
 # Build the combined metadata DataFrame
 combined_theta_df = pd.DataFrame({
-    'theta_value': all_thetas,
-    'disease_type': all_labels
+    'theta_value': given_all_thetas,
+    "real_theta": true_all_thetas,
+    'disease_type': given_all_labels
 }, index=sample_names)
 
 combined_theta_df.to_csv("theta_values.csv", index=True)
 print(f"Combined Theta Shape: {combined_theta_df.shape}")
-# =========================================================
-# 1. COMBINE AND SAVE: Uniform Theta Mixed Data
-# =========================================================
-# We use axis=1 to stack the 150 'B' patients next to the 150 'A' patients
+
+# %%
+# ====================================================
+# COMBINE AND SAVE: Uniform Theta Mixed Data
+# =================================================
+# We use axis=1 to stack the 'B' patients next to the 'A' patients
 combined_mixed_uniform_df = pd.concat([df_mixed_A, df_mixed_B], axis=1)
-combined_mixed_uniform_df.loc['disease_type'] = all_labels
+combined_mixed_uniform_df.loc['disease_type'] = given_all_labels
 combined_mixed_uniform_df.to_csv("disease_data_uniform_theta.csv")
 
 print(f"Saved Uniform Theta Mix. Shape: {combined_mixed_uniform_df.shape}") 
 # Expected: (20000, 300)
 
-# =========================================================
-# 2. GENERATE, COMBINE, AND SAVE: Fixed Theta (0.5) Mixed Data
-# =========================================================
+# ======================================================
+# GENERATE, COMBINE, AND SAVE: Fixed Theta (0.5) Mixed Data
+# ==================================================
 fixed_theta = 0.5
+# real theta used to generate the samples
+true_thetas_A_05 = np.full(n_mix, fixed_theta)
+true_thetas_B_05 = np.full(n_mix, fixed_theta)
 
+# noisy theta estimate that would be given to the model
+given_thetas_A_05 = np.clip(
+    true_thetas_A_05 + np.random.normal(0, theta_noise_std, n_mix),
+    0.0,
+    1.0
+)
+
+given_thetas_B_05 = np.clip(
+    true_thetas_B_05 + np.random.normal(0, theta_noise_std, n_mix),
+    0.0,
+    1.0
+)
 # Mix the data using the fixed 0.5 ratio
 # We reuse healthy_data_samples_A/B so the background noise is consistent!
 mixed_A_05_clean = (1 - fixed_theta) * healthy_data_samples_A + fixed_theta * disease_A_pool
@@ -327,16 +396,28 @@ df_mixed_B_05 = pd.DataFrame(
     index=df_real_healthy.index, 
     columns=[f'DiseaseB-Sample{i}' for i in range(final_mixed_B_05.shape[1])]
 )
+sample_names_05 = list(df_mixed_A_05.columns) + list(df_mixed_B_05.columns)
 
 # Combine them side-by-side
 combined_mixed_05_df = pd.concat([df_mixed_A_05, df_mixed_B_05], axis=1)
-combined_mixed_05_df.loc['disease_type'] = all_labels
+combined_mixed_05_df.loc['disease_type'] = given_all_labels
 combined_mixed_05_df.to_csv("disease_data_theta05.csv")
+combined_theta_05_df = pd.DataFrame({
+    'theta_value': np.concatenate([given_thetas_A_05, given_thetas_B_05]),  # what model gets
+    'real_theta': np.concatenate([true_thetas_A_05, true_thetas_B_05]),     # actual generating theta
+    'disease_type': given_all_labels
+}, index=sample_names_05)
+combined_theta_05_df.to_csv('theta_values05.csv')
 
 print(f"Saved Fixed Theta (0.5) Mix. Shape: {combined_mixed_05_df.shape}")
 # Expected: (20000, 400)
 
-## Raw Data PCA Baseline (or Pre-Training Sanity Check)
+# %%
+
+# %% [markdown]
+# ## Raw Data PCA Baseline (or Pre-Training Sanity Check)
+
+# %%
 from sklearn.decomposition import PCA
 
 # 1. Prep the Uniform Theta data (drop the label row and transpose so samples are rows)
@@ -348,20 +429,22 @@ pca_coords_uniform = PCA(n_components=2).fit_transform(raw_uniform_data)
 # 3. Plot it using the custom functions at the top of your script
 # Coloring by 'all_thetas' to see the continuous gradients (the "lines")
 ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
-                   c=all_thetas, cmap='magma', return_scat_obj=True, diag=False)
+                   c=given_all_thetas, cmap='magma', return_scat_obj=True, diag=False)
 
 # Add a colorbar and labels
 plt.colorbar(scat, label="Theta (Tumor Fraction)")
 show(title="Raw Data PCA: Uniform Theta (The 'Lines')", 
      xlabel="PC1", ylabel="PC2", aspect=True)
-## Raw Data PCA: Uniform Theta by Disease Type
-# 1. Plot using disease_type (all_labels) instead of theta
-# Set diag=False to remove the weird black line!
-ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
-                   c=all_labels, cmap='tab10', diag=False, return_scat_obj=True)
 
-# 2. Add a legend for the discrete disease types
-# Since tab10 is categorical, a legend works better than a colorbar
+# %% [markdown]
+# ## Raw Data PCA: Uniform Theta by Disease Type
+
+# %%
+#plot using disease_type (all_labels) instead of theta
+ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
+                   c=given_all_labels, cmap='tab10', diag=False, return_scat_obj=True)
+
+# legend for the discrete disease types
 handles, _ = scat.legend_elements(prop="colors")
 ax.legend(handles, ["Disease A (CRC)", "Disease B (SCLC)"], title="Disease Type")
 

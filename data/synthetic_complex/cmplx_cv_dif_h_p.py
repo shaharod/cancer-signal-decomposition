@@ -104,7 +104,6 @@ def show(title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, aspect=Fals
 ### Resolving Path issue
 from pathlib import Path
 
-# samples files
 script_dir = Path(__file__).resolve().parent
 # samples files
 # healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
@@ -126,7 +125,7 @@ theta_B_path = (script_dir / '../../data/real/SCLC_theta.csv').resolve()
 print(f'{healthy_path}')
 ### Load read data
 import pandas as pd
-
+import utils.data_utils as du
 
 # loading real data
 df_real_healthy = pd.read_csv(healthy_path, index_col=0)
@@ -138,9 +137,10 @@ metadata_A = pd.read_csv(theta_A_path)
 metadata_B = pd.read_csv(theta_B_path)
 # Creating Profiles
 # average healthy data
-blueprint_healthy = df_real_healthy.mean(axis=1).values
-print(blueprint_healthy)
-print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
+df_healthy_pool = du.clean_rows(df_real_healthy.T).T
+healthy_matrix = df_healthy_pool.values
+num_pool_samples = healthy_matrix.shape[1]
+# print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
 
 # extract max sample for disease A
 max_idx_A = metadata_A['data_list'].idxmax()
@@ -163,30 +163,42 @@ print(f"blueprint DiseaseB sum is: {blueprint_B_mixed.sum()}")
 print(f"BlueprintAMixed is {blueprint_A_mixed} with shape {blueprint_A_mixed.shape}")
 print(f"BlueprintBMixed is {blueprint_B_mixed} with shape {blueprint_B_mixed.shape}")
 ### Isolting Cancer
+universal_h_baseline = df_healthy_pool.mean(axis=1).values
 # isolating disease A
-pure_disease_A = (blueprint_A_mixed - (1 - theta_A) * blueprint_healthy) / theta_A
+pure_disease_A = (blueprint_A_mixed - (1 - theta_A) * universal_h_baseline) / theta_A
 pure_disease_A = pure_disease_A.clip(min=0)
 
 # isolating disease B
-pure_disease_B = (blueprint_B_mixed - (1 - theta_B) * blueprint_healthy) / theta_B
+pure_disease_B = (blueprint_B_mixed - (1 - theta_B) * universal_h_baseline) / theta_B
 pure_disease_B = pure_disease_B.clip(min=0)
 
 print("Successfully isolated pure Disease A and Disease B profiles.")
 ### Pure datasets
-n_genes = len(blueprint_healthy)
+n_genes = len(df_healthy_pool)
 if not (n_genes==len(pure_disease_A)) or not (n_genes==len(pure_disease_B)):
     raise ValueError()
 n_healthy_samples = 300
 n_disease_A_samples = 200
 n_disease_B_samples = 200
 bio_cv = 0.1
-healthy_std = bio_cv * blueprint_healthy
+# healthy_std = bio_cv * blueprint_healthy
 diseaseA_std = bio_cv * pure_disease_A
 diseaseB_std = bio_cv * pure_disease_B
 total_healthy_needed = n_healthy_samples + n_disease_A_samples + n_disease_B_samples
 
+sampled_healthy_df = df_healthy_pool.sample(
+    n=total_healthy_needed, 
+    axis=1, 
+    replace=(total_healthy_needed > df_healthy_pool.shape[1])
+)
+
+# Extract the values. Shape will be (n_genes, 700)
+base_healthy_pool = sampled_healthy_df.values
+healthy_std = bio_cv * base_healthy_pool
 healthy_pool = np.random.normal(
-    blueprint_healthy[:, None], healthy_std, size=(n_genes, total_healthy_needed)
+    base_healthy_pool, 
+    healthy_std, 
+    size=(n_genes, total_healthy_needed)
 ).clip(min=0)
 
 disease_A_pool = np.random.normal(
