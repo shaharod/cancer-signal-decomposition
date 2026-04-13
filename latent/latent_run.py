@@ -141,7 +141,7 @@ if __name__ == '__main__':
     # run_comprehensive_latent_analysis("disease", is_mixed=False, mode="true")
     
     # Execute the "Tournament" latent review for both Synthetic Modes
-    for mode in ["true", "fixed"]:
+    for mode in ["true"]:
         # Update config flags to match experiment
         if mode == "true":
             cfg.RANDOM_THETA_EXP = False
@@ -154,6 +154,6 @@ if __name__ == '__main__':
         run_comprehensive_latent_analysis("disease", is_mixed=True, mode=mode)
         
         # Analyze Disease Models trained with Disease Samples Only
-        run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
+        # run_comprehensive_latent_analysis("disease", is_mixed=False, mode=mode)
 
 
