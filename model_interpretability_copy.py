@@ -816,13 +816,6 @@ def analyze_disease_drivers_grid(labels_dict, inference_cache, test_df_full, tes
                         #     fold_change_lines=[2.0, 5.0, 10.0], # CUSTOMIZE LINES HERE
                         #     highlight_top_n=top_n, gene_names=gene_names
                         #     )
-                        plot_absolute_expression_scatter_with_significance(
-                            ax=ax1, healthy_cohort_matrix=recon_h_np[is_true_healthy],
-                            disease_cohort_matrix=recon_mix_np[is_target_disease],
-                            title=f"Total Expression Deconvolution (Model:{model_label})",
-                            gene_names=gene_names 
-                        )
-                        continue
                         plot_residual_magnitude_scatter_template(
                            ax=ax2, h_baseline_avg=h_avg, d_disease_avg=d_avg,
                            title=f"Disease Branch VS Healthy Expression | Mode: {mode}",
@@ -830,6 +823,14 @@ def analyze_disease_drivers_grid(labels_dict, inference_cache, test_df_full, tes
                            radiating_ratio_lines=[0.5, 1.0, 2.0],
                            highlight_top_n=top_n, gene_names=gene_names
                        )
+                        
+                        plot_absolute_expression_scatter_with_significance(
+                            ax=ax1, healthy_cohort_matrix=recon_h_np[is_true_healthy],
+                            disease_cohort_matrix=recon_mix_np[is_target_disease],
+                            title=f"Total Expression Deconvolution (Model:{model_label})",
+                            gene_names=gene_names 
+                        )
+                        
                         
                     except Exception as e:
                         traceback.print_exc()
@@ -854,6 +855,277 @@ def analyze_disease_drivers_grid(labels_dict, inference_cache, test_df_full, tes
             plt.close(fig2)
 
             print(f"Saved: {filename1} and {filename2}")
+
+def plot_disease_reconstruction_mse_lines(labels_dict, inference_cache, test_df_full, true_disease_input, scaler, scale_bool,
+                                           save_path, mode, is_mixed=False):
+    """
+    Calculates the global Test MSE for Disease Branch Reconstruction from the inference cache
+    and plots it as a line graph (Test MSE vs. Encoding Size) with subplots for each base_name.
+    """
+    # _, true_healthy = load_reconstruction_data('healthy', mode)
+    # test_df_full.drop
+    # # Pre-calculate the truth matrix
+    # test_truth_d = true_disease_input.reindex(test_df_full.index)
+    # test_truth_h = true_healthy.reindex(test_df_full.index)
+    # benchmark_truth = test_truth_d.fillna(test_truth_h).values
+    
+    # ---------------------------------------------------------
+    # 1. EXTRACT DATA AND CALCULATE MSE
+    # Structure: master_results[base_name][model_label][enc_size] = mse_val
+    # ---------------------------------------------------------
+    master_results = {}
+    # Isolate ONLY the sample IDs that are true disease samples
+    # This automatically drops any 'Healthy-SampleX' from the evaluation
+    disease_test_indices = test_df_full.index.intersection(true_disease_input.index)
+    
+    # Filter the Truth Matrix to ONLY these disease samples
+    benchmark_truth = true_disease_input.loc[disease_test_indices].values
+    
+    # Get the integer row positions of these disease samples in test_df_full
+    # We need this to slice the PyTorch/NumPy output arrays correctly
+    disease_row_locs = [test_df_full.index.get_loc(idx) for idx in disease_test_indices]
+
+    for base_name, models in labels_dict.items():
+        master_results[base_name] = {}
+        
+        # Determine if this specific base_name pipeline needs inverse scaling
+        # needs_inverse = ("scaled" in base_name.lower()) and (scaler is not None)
+        
+        for enc in cfg.ENCODING_SIZES:
+            for model_label, folder_tag in models.items():
+                if model_label not in master_results[base_name]:
+                    master_results[base_name][model_label] = {}
+                    
+                try:
+                    model_outputs = inference_cache[base_name][enc].get(model_label)
+                    if model_outputs is None or model_outputs['disease'] is None:
+                        continue
+                        
+                    recon_d = model_outputs['disease']
+                    
+                    # Convert to numpy and inverse scale if necessary
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
+                    else:
+                        recon_final = recon_d.detach().cpu().numpy()
+                        
+                    print(f"Mean value of Mixed Input: {np.mean(test_df_full.values)}")
+                    print(f"Mean value of Pure Disease Target: {np.mean(benchmark_truth)}")
+                    # Calculate Global MSE for this model at this encoding size
+                    recon_disease_only = recon_final[disease_row_locs]
+                        
+                    # Calculate Global MSE on JUST the disease samples
+                    global_mse = np.mean((benchmark_truth - recon_disease_only) ** 2)
+                    master_results[base_name][model_label][enc] = global_mse
+                except Exception as e:
+                    print(f"Error calculating MSE for {base_name}-{model_label}-{enc}: {e}")
+                    continue
+
+    # ---------------------------------------------------------
+    # 2. PLOTTING THE LINES
+    # ---------------------------------------------------------
+    n_subplots = len(master_results)
+    fig, axes = plt.subplots(1, n_subplots, figsize=(7.5 * n_subplots, 6), sharey=False)
+    
+    # Ensure axes is iterable even if there's only 1 subplot
+    if n_subplots == 1: axes = [axes]
+    
+    # Style map to keep lines consistent across subplots
+    style_map = {
+        'basic': {'color': '#1f77b4', 'marker': 'o'},
+        'layered': {'color': '#2ca02c', 'marker': 's'},
+        'pca-based': {'color': '#EC7063', 'marker': '^'},
+        'PCA': {'color': '#EC7063', 'marker': '^'}
+    }
+    # Fallback colors if model_label isn't in style_map
+    fallback_colors = ['#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    
+    for ax, (base_name, models_dict) in zip(axes, master_results.items()):
+        color_idx = 0
+        
+        for model_label, enc_dict in models_dict.items():
+            # Skip if no valid data was calculated for this model
+            if not enc_dict: continue
+            
+            # Sort encodings just in case
+            valid_encodings = sorted(list(enc_dict.keys()))
+            y_values = [enc_dict[enc] for enc in valid_encodings]
+            
+            # Get style
+            match_key = next((k for k in style_map.keys() if k.lower() in model_label.lower()), None)
+            if match_key:
+                style = style_map[match_key]
+            else:
+                style = {'color': fallback_colors[color_idx % len(fallback_colors)], 'marker': 'd'}
+                color_idx += 1
+            
+            # Plot the line
+            ax.plot(valid_encodings, y_values, 
+                    label=model_label, 
+                    color=style['color'], 
+                    marker=style['marker'], 
+                    linewidth=2, markersize=8)
+
+            # Add Data Labels
+            for x_val, y_val in zip(valid_encodings, y_values):
+                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
+                            xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
+
+        # Formatting Subplot
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(cfg.ENCODING_SIZES)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend()
+
+        # Add headroom so labels don't get cut off at the top
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    # Master Figure Formatting
+    fig.suptitle(f"Disease Branch Reconstruction: Test MSE vs Encoding Size (Theta: {mode})", fontsize=18, y=1.05)
+    plt.tight_layout()
+    
+    # Saving
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    os.makedirs(out_folder, exist_ok=True)
+    
+    output_path = out_folder / f"{save_path}_disease_mse_lines.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Test MSE Line Plot to {output_path}")
+
+
+def plot_disease_reconstruction_mse_by_theta(labels_dict, inference_cache, test_df_full, true_disease_input, scaler, scale_bool, save_path, mode, is_mixed=False):
+    """
+    Calculates the global Test MSE for Disease Branch Reconstruction, binned by Theta ranges.
+    Plots Test MSE vs. Encoding Size using different line styles for different theta bins.
+    """
+    # 1. Isolate DISEASE samples
+    disease_mask = test_df_full.index.isin(true_disease_input.index)
+    test_df_disease = test_df_full[disease_mask]
+    
+    # 2. Prep Truth Matrix
+    benchmark_truth = true_disease_input.reindex(test_df_disease.index).values
+    
+    # 3. Create Theta Bins (Boolean Masks)
+    # Extract thetas aligned with our disease samples
+    thetas = test_df_disease['theta_value'].values
+    
+    theta_bins = {
+        'Low (<0.33)': (thetas >= 0.0) & (thetas < 0.33),
+        'Med (0.33-0.66)': (thetas >= 0.33) & (thetas < 0.66),
+        'High (>0.66)': (thetas >= 0.66) & (thetas <= 1.0)
+    }
+    # theta_bins = {
+    #     'low (<0.5)': (thetas >=0.0) & (thetas < 0.5),
+    #     'high ( >=0.5)': (thetas >=0.5) & (thetas <= 1.0)
+    # }
+    # ---------------------------------------------------------
+    # 1. EXTRACT DATA AND CALCULATE MSE BY BIN
+    # Structure: master_results[base_name][model_label][bin_name][enc_size] = mse_val
+    # ---------------------------------------------------------
+    master_results = {}
+    
+    for base_name, models in labels_dict.items():
+        master_results[base_name] = {}
+        
+        for enc in cfg.ENCODING_SIZES:
+            for model_label, folder_tag in models.items():
+                if model_label not in master_results[base_name]:
+                    master_results[base_name][model_label] = {bin_name: {} for bin_name in theta_bins.keys()}
+                    
+                try:
+                    model_outputs = inference_cache[base_name][enc].get(model_label)
+                    if model_outputs is None or model_outputs['disease'] is None:
+                        continue
+                        
+                    recon_d = model_outputs['disease']
+                    
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
+                    else:
+                        recon_final = recon_d.detach().cpu().numpy()
+                        
+                    recon_disease_only = recon_final[disease_mask]
+                    
+                    # Calculate MSE for EACH theta bin
+                    for bin_name, bin_mask in theta_bins.items():
+                        # Skip if a bin has no samples (can happen in 'fixed 0.5' mode)
+                        if not np.any(bin_mask):
+                            continue
+                            
+                        truth_binned = benchmark_truth[bin_mask]
+                        recon_binned = recon_disease_only[bin_mask]
+                        
+                        bin_mse = np.mean((truth_binned - recon_binned) ** 2)
+                        master_results[base_name][model_label][bin_name][enc] = bin_mse
+                        
+                except Exception as e:
+                    print(f"Error calculating MSE for {base_name}-{model_label}-{enc}: {e}")
+                    continue
+
+    # ---------------------------------------------------------
+    # 2. PLOTTING THE LINES
+    # ---------------------------------------------------------
+    n_subplots = len(master_results)
+    fig, axes = plt.subplots(1, n_subplots, figsize=(9 * n_subplots, 7), sharey=False)
+    if n_subplots == 1: axes = [axes]
+    
+    # Base colors for models
+    color_map = {'basic': '#1f77b4', 'layered': '#2ca02c', 'pca': '#EC7063'}
+    # Line styles for theta bins
+    style_map = {'Low (<0.33)': 'dotted', 'Med (0.33-0.66)': 'dashed', 'High (>0.66)': 'solid'}
+    
+    for ax, (base_name, models_dict) in zip(axes, master_results.items()):
+        
+        for model_label, bin_dict in models_dict.items():
+            # Get base color for the model
+            m_color = next((v for k, v in color_map.items() if k in model_label.lower()), 'gray')
+            
+            for bin_name, enc_dict in bin_dict.items():
+                if not enc_dict: continue
+                
+                valid_encodings = sorted(list(enc_dict.keys()))
+                y_values = [enc_dict[enc] for enc in valid_encodings]
+                
+                l_style = style_map.get(bin_name, 'solid')
+                
+                # Plot the binned line
+                ax.plot(valid_encodings, y_values, 
+                        label=f"{model_label} [{bin_name}]", 
+                        color=m_color, 
+                        linestyle=l_style,
+                        marker='o', 
+                        linewidth=2, markersize=6)
+
+                # Add Data Labels (optional, might get crowded with 9 lines, you can comment this loop out if it's too messy)
+                for x_val, y_val in zip(valid_encodings, y_values):
+                    ax.annotate(f'{y_val:.0f}', (x_val, y_val), textcoords="offset points", 
+                                xytext=(0,10), ha='center', fontsize=8)
+
+        # Formatting Subplot
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(cfg.ENCODING_SIZES)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        
+        # Move legend outside to prevent overlapping lines
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    fig.suptitle(f"Disease MSE by Theta Bins vs Encoding Size", fontsize=18, y=1.05)
+    plt.tight_layout()
+    # plt.show()
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    os.makedirs(out_folder, exist_ok=True)
+    output_path = out_folder / f"{save_path}_disease_mse_by_theta.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Theta Binned Test MSE Line Plot to {output_path}")
 
 
 def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path, mode, is_mixed=False, is_simple=False):
@@ -896,6 +1168,18 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # ==========================================
 
     if is_mixed:
+        print("🎨 Drawing disease recon mse...")
+        # plot_disease_reconstruction_mse_by_theta
+        plot_disease_reconstruction_mse_by_theta(labels_dict=labels_dict,
+                                           inference_cache=inference_cache,
+                                           test_df_full=test_df_full,
+                                           true_disease_input=true_disease,
+                                           scaler=scaler,
+                                           scale_bool=scale_bool,
+                                           save_path=save_path, 
+                                           mode=mode,
+                                           is_mixed=is_mixed)
+        
         print("🎨 Drawing Disease Drivers...")
         analyze_disease_drivers_grid(
             labels_dict=labels_dict,
@@ -909,7 +1193,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
             top_n=10,  # Shows top 10 up and top 10 down per subplot
             is_mixed=is_mixed                    
         )
-    return
+    
     print("🎨 Drawing Total Mix Scatter Plots...")
     analyze_total_reconstruction(
         labels_dict=labels_dict, 
@@ -976,13 +1260,13 @@ if __name__ == '__main__':
     # # print(f'model type is: 'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
     # print("########### RUNNING HEALTHY MODEL ############")
     # interpret_healthy_model()
-    cfg.FIXED_THETA_EXP = True
-    cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_theta05.csv"
-    print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
-    interpret_disease_mix(mode="fixed")
     cfg.FIXED_THETA_EXP = False
     cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_uniform_theta.csv"
     print("########### RUNNING MIX MODEL UNIFORM THETA ############")
     interpret_disease_mix(mode="true")
+    cfg.FIXED_THETA_EXP = True
+    cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_theta05.csv"
+    print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
+    interpret_disease_mix(mode="fixed")
 
 
