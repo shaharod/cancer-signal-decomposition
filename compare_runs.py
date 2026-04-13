@@ -38,7 +38,7 @@ def get_comparison_paths(phase, model_type, enc_size, scale_tag='scaled',
 
     for variant in data_variants:
         # 1. Target the specific experiment root
-        exp_dir = "outputs" / f'synthetic_experiments_{variant}' / 'disease_mix_all'
+        exp_dir = "outputs" / f'synthetic_experiments_{variant}'
         
         if not exp_dir.exists():
             print(f"Skipping missing experiment directory: {exp_dir.name}")
@@ -88,7 +88,7 @@ def get_comparison_paths(phase, model_type, enc_size, scale_tag='scaled',
 
 import torch
 
-def build_dynamic_meta_cache(phase, base_name, model_types, enc_sizes, data_variants, theta_mode, scale_bool=True):
+def build_dynamic_meta_cache(phase, base_name, model_types, enc_sizes, data_variants, theta_mode, gene_size, scale_bool=True):
     """
     Uses the discovered paths to load models and run inference,
     building the meta-cache required for the cross-variant plotting grids.
