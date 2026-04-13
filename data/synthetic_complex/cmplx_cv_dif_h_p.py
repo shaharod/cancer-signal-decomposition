@@ -125,7 +125,13 @@ theta_B_path = (script_dir / '../../data/real/SCLC_theta.csv').resolve()
 print(f'{healthy_path}')
 ### Load read data
 import pandas as pd
-import utils.data_utils as du
+def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensures each patient is represented only once by randomly 
+    selecting one sample per patient ID (prefix before '_').
+    """
+    patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
+    return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
 
 # loading real data
 df_real_healthy = pd.read_csv(healthy_path, index_col=0)
@@ -137,7 +143,7 @@ metadata_A = pd.read_csv(theta_A_path)
 metadata_B = pd.read_csv(theta_B_path)
 # Creating Profiles
 # average healthy data
-df_healthy_pool = du.clean_rows(df_real_healthy.T).T
+df_healthy_pool = clean_rows(df_real_healthy.T).T
 healthy_matrix = df_healthy_pool.values
 num_pool_samples = healthy_matrix.shape[1]
 # print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
@@ -202,11 +208,11 @@ healthy_pool = np.random.normal(
 ).clip(min=0)
 
 disease_A_pool = np.random.normal(
-    pure_disease_A[:, None], diseaseA_std, size=(n_genes, n_disease_A_samples)
+    pure_disease_A[:, None], diseaseA_std[:, None], size=(n_genes, n_disease_A_samples)
 ).clip(min=0)
 
 disease_B_pool = np.random.normal(
-    pure_disease_B[:, None], diseaseB_std, size=(n_genes, n_disease_B_samples)
+    pure_disease_B[:, None], diseaseB_std[:, None], size=(n_genes, n_disease_B_samples)
 ).clip(min=0)
 
 pure_healthy_data = healthy_pool[:, :n_healthy_samples]
