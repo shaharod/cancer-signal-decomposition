@@ -111,7 +111,7 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     if theta_path:
         # Combined DF with theta as last column
         # df_genes['theta_value'] = df_theta.iloc[:, 0]
-        if mode in ["fixed", "real"]:
+        if mode in ["fixed", "true"]:
             df_theta = pd.read_csv(theta_path, index_col=0)
             print(f"theta {mode} used from path {theta_path}")
             # Align indices
@@ -124,7 +124,7 @@ def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
             print(">>> [EXPERIMENT] Overwriting real thetas with rnad values U(0,1)")
             df_genes['theta_value'] = np.random.rand(len(df_genes))
         else:
-            raise ValueError("what mode are we at and why did we not read path well")
+            raise ValueError(f"what mode are we at: {mode} and why did we not read path well")
 
     else:
         # Healthy data: Add a column of zeros for theta
@@ -147,6 +147,7 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
     if phase == "healthy":
         # Healthy only case
         df_target = prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
+
     else:
         # Disease case (might be mixed with healthy)
         df_d = prepare_and_align_data(cfg.get_disease_gene_path(mode), theta_path=cfg.get_theta_path(mode), mode=mode)
@@ -156,13 +157,13 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
             df_target = pd.concat([df_h, df_d])
         else:
             df_target = df_d
-
+    df_target = df_target.fillna(0.0)
     # 2. Handle Splits
     split_path = cfg.get_split_path(phase=phase, scale_tag=tag, is_mixed=is_mixed)
     train_df, test_df = get_split_data(df_target, split_path=split_path)
     info_dict = {
-        'test_df_full': test_df.copy().fillna(0.0), # Keep everything (genes, theta, type)
-        'train_df_full': train_df.copy().fillna(0.0)
+        'test_df_full': test_df.copy(), # Keep everything (genes, theta, type)
+        'train_df_full': train_df.copy()
     }
     # 3. Clean Metadata (Drop disease_type but KEEP theta_value)
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
