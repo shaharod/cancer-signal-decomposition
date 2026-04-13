@@ -386,7 +386,7 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
     #     'default': '#7f7f7f'   # Gray fallback
     # }
     # Get encoding sizes from the first available model
-    first_model = next(iter(data_s.values()))
+    first_model = next(iter(data_u.values()))
     encoding_sizes = list(first_model[0].keys())
     n_enc = len(encoding_sizes)
     
