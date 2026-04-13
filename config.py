@@ -67,7 +67,7 @@ EPOCH_JUMP     = 5
 def choose_enc_layers():
     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYN_CMPLX):
         # return [16, 32, 64, 128], 512, 128
-        return [2, 4, 8], 512, 64
+        return [2, 4, 8, 16], 512, 64
     else:
         return [8, 16], 32, 16
 
@@ -80,9 +80,9 @@ def get_theta_path(mode):
     if not SYNTHETIC_DATA:
         raise ValueError("Didnt fix yet for file of real data")
     match mode:
-        case 'real': return DATA_SUB / "theta_values.csv"
-        case 'fixed': return DATA_SUB /"theta_values05"
-        case _: raise ValueError("what mode are we at and why do we not have the matching theta path")
+        case 'true': return DATA_SUB / "theta_values.csv"
+        case 'fixed': return DATA_SUB /"theta_values05.csv"
+        case _: raise ValueError(f"what mode are we at: {mode} and why do we not have the matching theta path")
     
 # # old Layered AE architecture settings
 # ENCODING_SIZES = [16, 32, 64, 128] if not SYNTHETIC_DATA else [8, 16]
@@ -90,7 +90,7 @@ def get_theta_path(mode):
 # H2 = 128 if not SYNTHETIC_DATA else 16
 
 # ---- Tournament Logic Helpers ----
-SCALING_OPTIONS = [False]
+SCALING_OPTIONS = [False, True]
 MODEL_TYPES     = ['ae_basic', 'ae_layered']
 SIG_LIST        = ['Megakaryocyte', 'Neutrophils']
 
