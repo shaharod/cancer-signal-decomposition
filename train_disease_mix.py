@@ -106,28 +106,28 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                     out_dir, "results.json"
                     )
             # --- HYBRID TOURNAMENT: Healthy AE + Disease PCA ---
-            for h_name, h_obj in healthy_library:
-                if h_name == "pca": continue # Already handled by benchmark
+            # for h_name, h_obj in healthy_library:
+            #     if h_name == "pca": continue # Already handled by benchmark
                 
-                label = f"mix_H-{h_name}_D-pca"
-                print(f"Testing Hybrid: {label} | {tag} | Enc: {enc}")
+            #     label = f"mix_H-{h_name}_D-pca"
+            #     print(f"Testing Hybrid: {label} | {tag} | Enc: {enc}")
                 
-                # Use the same disease PCA we just trained for this encoding size
-                mix_model = ModelFactory.create_mix_model(h_obj, pca_d_obj)
+            #     # Use the same disease PCA we just trained for this encoding size
+            #     mix_model = ModelFactory.create_mix_model(h_obj, pca_d_obj)
                 
-                # Evaluate
-                bench_trainer = Trainer(mix_model, scaler=scaler, device=cfg.DEVICE)
-                val_mse = bench_trainer.get_mse(test_d)
-                train_mse = bench_trainer.get_mse(train_d)
+            #     # Evaluate
+            #     bench_trainer = Trainer(mix_model, scaler=scaler, device=cfg.DEVICE)
+            #     val_mse = bench_trainer.get_mse(test_d)
+            #     train_mse = bench_trainer.get_mse(train_d)
                 
-                # Save folder
-                out_dir = cfg.get_path("disease", tag, label, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
+            #     # Save folder
+            #     out_dir = cfg.get_path("disease", tag, label, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
                 
-                # Save results for load_data_for_analysis
-                io.save_results({"val_mse": val_mse, "train_mse": train_mse}, out_dir, "results.json")
+            #     # Save results for load_data_for_analysis
+            #     io.save_results({"val_mse": val_mse, "train_mse": train_mse}, out_dir, "results.json")
                 
-                # Save the Disease PCA object so the grid can load it
-                joblib.dump(pca_d_obj, out_dir / "model.joblib")
+            #     # Save the Disease PCA object so the grid can load it
+            #     joblib.dump(pca_d_obj, out_dir / "model.joblib")
 
             # --- TOURNAMENT: CROSS-ARCHITECTURE AE MIX ---
             for d_arch in cfg.MODEL_TYPES:
@@ -168,5 +168,5 @@ if __name__ == "__main__":
             cfg.FIXED_THETA_EXP = True
             
         run_cross_architecture_tournament(mode, is_mixed=True)
-        run_cross_architecture_tournament(mode, is_mixed=False)
+        # run_cross_architecture_tournament(mode, is_mixed=False)
 
