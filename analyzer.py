@@ -193,6 +193,6 @@ if __name__ == '__main__':
     # TODO: fix logic, maybe from command lines arguments or something
     # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
         analyze_disease_mix(is_mixed=True) #both healthy and disease samples in training
-        analyze_disease_mix(is_mixed=False) #disease samples only
+        # analyze_disease_mix(is_mixed=False) #disease samples only
 
 
