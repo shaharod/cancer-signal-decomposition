@@ -90,5 +90,6 @@ def fix_missing_meta():
 
 if __name__ == "__main__":
     # fix_missing_meta()
+    print(f"currrrnt run is with {cfg.BASE_EXP_DIR}")
     train_all_healthy()
     # print(cfg.HEALTHY_GENES_PATH)

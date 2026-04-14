@@ -151,7 +151,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                     io.save_results(meta, out_dir, "best_meta.json")
 
 if __name__ == "__main__":
-    for mode in ["true", "fixed"]:
+    for mode in ["true"]:
         print(f"\n" + "="*40)
         print(f">>> STARTING SYNTHETIC EXPERIMENT: {mode.upper()}")
         print("="*40)
