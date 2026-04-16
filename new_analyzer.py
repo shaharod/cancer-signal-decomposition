@@ -700,17 +700,22 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
 
 
 def run_aggregation_disease_mse():
-    variants_to_test = {
+    variants = {
         'Theta Limit (0.7)': 'theta_lim_0.7',
         'Diff DP': 'dif_dp',
         'Diff HP': 'dif_hp'
     }
-    variants_to_test_2 = {
+    variants_t= {
         # 'Theta Limit (0.7)': 'theta_lim_0.7',
         'Theta Noise 0.001': 'theta_0.001',
         'Theta Noise 0.005': 'theta_0.005',
         'Theta Noise 0.01': 'theta_0.01',
         'Theta Noise 0.1': 'theta_0.1',
+    }
+
+    variants_lim = {
+        'No Theta Limit' : 'no_theta_lim',
+        'Theta Limit (0.7)': 'theta_lim_0.7'
     }
     
     baseline = 'PCA'
@@ -731,14 +736,23 @@ def run_aggregation_disease_mse():
     }
 
     aggregate_and_plot_disease_branch_variants(
-        variants_dict=variants_to_test,
+        variants_dict=variants_lim,
+        labels_dict=labels_dict,
+        baseline='PCA',
+        mode='true',           # Pass your mode
+        is_mixed=True,
+        variant_char='_lim'
+    )
+    
+    aggregate_and_plot_disease_branch_variants(
+        variants_dict=variants,
         labels_dict=labels_dict,
         baseline='PCA',
         mode='true',           # Pass your mode
         is_mixed=True
     )
     aggregate_and_plot_disease_branch_variants(
-        variants_dict=variants_to_test_2,
+        variants_dict=variants_t,
         labels_dict=labels_dict,
         baseline='PCA',
         mode='true',           # Pass your mode
@@ -790,6 +804,7 @@ if __name__ == '__main__':
             variants=variants_lim,
             variant_char='_lim'
         )
+        
         #comapring profile variants  
         aggregate_and_plot_variants(
             baseline='PCA', 

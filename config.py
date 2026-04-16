@@ -12,11 +12,12 @@ FIXED_THETA_EXP = False
 SYNTHETIC_DATA = True
 SYN_HP = False
 SYN_DP = False
-SYN_1T = False
-SYN_01T = True
+SYN_1T = True
+SYN_01T = False
 SYN_001T = False
-SYN_005T = False
+SYN_005T =  True
 SYN_TLIM = False
+SYN_T_NO_LIM = False
 SYN_SIMPLE = False
 SYN_CMPLX = not SYN_SIMPLE
 DEVICE = 'cpu' # 'cuda' for Windows/Linux with NVIDIA, 'mps' for macOS
@@ -50,15 +51,17 @@ else:
         DATA_SUB = DATA_SUB / 'synthetic_complex'
     
     if SYN_001T:
-        DATA_SUB = DATA_SUB / '0.001t'
+        DATA_SUB = DATA_SUB / 'theta_0.001'
     elif SYN_005T:
-        DATA_SUB = DATA_SUB / '0.005t'
+        DATA_SUB = DATA_SUB / 'theta_0.005'
     elif SYN_01T:
-        DATA_SUB = DATA_SUB / '0.01t'
+        DATA_SUB = DATA_SUB / 'theta_0.01'
     elif SYN_1T:
-        DATA_SUB = DATA_SUB / '0.1t'
+        DATA_SUB = DATA_SUB / 'theta_0.1'
     elif SYN_TLIM:
-        DATA_SUB = DATA_SUB / 't_lim_0.7'
+        DATA_SUB = DATA_SUB / 'theta_lim_0.7'
+    elif SYN_T_NO_LIM:
+        DATA_SUB = DATA_SUB / 'theta_no_lim'
     elif SYN_DP:
         DATA_SUB = DATA_SUB / 'dif_dp'
     elif SYN_HP:
@@ -136,6 +139,8 @@ if SYNTHETIC_DATA:
         suffix = suffix + "theta_0.005"
     elif SYN_TLIM:
         suffix = suffix + "theta_lim_0.7"
+    elif SYN_T_NO_LIM:
+        suffix = suffix + "theta_no_lim"
     elif SYN_DP:
         suffix = suffix + "dif_dp"
     elif SYN_HP:
