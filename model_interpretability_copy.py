@@ -1199,7 +1199,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
             top_n=10,  # Shows top 10 up and top 10 down per subplot
             is_mixed=is_mixed                    
         )
-    return
+    
     print("🎨 Drawing Disease Branch Scatter Plots...")
     analyze_disease_portion_reconstruction_scatter(
         labels_dict=labels_dict, 
