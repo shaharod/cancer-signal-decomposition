@@ -185,7 +185,6 @@ def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, tru
     """
     variant_results = {}
     variant_results_bins = {}
-    bin_counts = {bin_name: np.sum(mask) for bin_name, mask in theta_bins.items()}
     # Isolate ONLY the sample IDs that are true disease samples
     disease_mask = test_df_full.index.isin(true_disease_input.index)
     test_df_disease = test_df_full[disease_mask]
@@ -247,7 +246,7 @@ def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, tru
                     print(f"Error calculating Disease MSE for {base_name}-{model_label}-{enc}: {e}")
                     continue
                     
-    return variant_results, variant_results_bins
+    return variant_results, variant_results_bins, bin_counts
 
 def plot_disease_variant_multi_model_grid(master_variant_data, enc_sizes, save_dir, baseline_name):
     """
@@ -718,6 +717,79 @@ def plot_per_var_d_mse_bins(results, bin_counts, is_mixed, save_path):
     plt.close(fig)
     print(f"Saved Theta Binned Test MSE Line Plot to {output_path}")
 
+def plot_per_var_d_mse(results, is_mixed, save_path, mode):
+    n_subplots = len(results)
+    fig, axes = plt.subplots(1, n_subplots, figsize=(7.5 * n_subplots, 6), sharey=False)
+    
+    # Ensure axes is iterable even if there's only 1 subplot
+    if n_subplots == 1: axes = [axes]
+    
+    # Style map to keep lines consistent across subplots
+    style_map = {
+        'basic': {'color': '#1f77b4', 'marker': 'o'},
+        'layered': {'color': '#2ca02c', 'marker': 's'},
+        'pca-based': {'color': '#EC7063', 'marker': '^'},
+        'PCA': {'color': '#EC7063', 'marker': '^'}
+    }
+    # Fallback colors if model_label isn't in style_map
+    fallback_colors = ['#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+    
+    for ax, (base_name, models_dict) in zip(axes, results.items()):
+        color_idx = 0
+        
+        for model_label, enc_dict in models_dict.items():
+            # Skip if no valid data was calculated for this model
+            if not enc_dict: continue
+            
+            # Sort encodings just in case
+            valid_encodings = sorted(list(enc_dict.keys()))
+            y_values = [enc_dict[enc] for enc in valid_encodings]
+            
+            # Get style
+            match_key = next((k for k in style_map.keys() if k.lower() in model_label.lower()), None)
+            if match_key:
+                style = style_map[match_key]
+            else:
+                style = {'color': fallback_colors[color_idx % len(fallback_colors)], 'marker': 'd'}
+                color_idx += 1
+            
+            # Plot the line
+            ax.plot(valid_encodings, y_values, 
+                    label=model_label, 
+                    color=style['color'], 
+                    marker=style['marker'], 
+                    linewidth=2, markersize=8)
+
+            # Add Data Labels
+            for x_val, y_val in zip(valid_encodings, y_values):
+                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
+                            xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
+
+        # Formatting Subplot
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(cfg.ENCODING_SIZES)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend()
+
+        # Add headroom so labels don't get cut off at the top
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    # Master Figure Formatting
+    fig.suptitle(f"Disease Branch Reconstruction: Test MSE vs Encoding Size (Theta: {mode})", fontsize=18, y=1.05)
+    plt.tight_layout()
+    
+    # Saving
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    os.makedirs(out_folder, exist_ok=True)
+    
+    output_path = out_folder / f"{save_path}_disease_mse_lines.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Test MSE Line Plot to {output_path}")
+
 def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, baseline='PCA', 
                                                mode='true', is_mixed=True, variant_char=''):
     """
@@ -743,6 +815,7 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
                 
                 # Dynamically set the boolean and tag based on the dictionary key
                 scale_bool = (pipeline_name.lower() == 'scaled')
+                scale = 'scaled' if scale_bool else 'unscaled'
                 tag = pipeline_name.lower()
                 
                 print(f"  -> Running Pipeline: {pipeline_name.upper()} (scale_bool={scale_bool})")
@@ -766,7 +839,7 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
                 print(f"########3 CALCLUATING DISEASE MSE FOR {'UNSCALED' if not scale_bool else 'SCALED'}")
                 print(f"pipeline is for {single_pipeline_dict.keys()}")
                 # 4. Calculate Isolated Disease MSE
-                var_mse_dict, var_mse_dict_bins = calculate_disease_branch_mse(
+                var_mse_dict, var_mse_dict_bins, bin_counts = calculate_disease_branch_mse(
                     labels_dict=single_pipeline_dict, 
                     inference_cache=cache, 
                     test_df_full=test_df_full, 
@@ -778,6 +851,19 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
                 # Merge this pipeline's results into the master variant dictionary
                 master_variant_data[variant_name].update(var_mse_dict)
                 
+                plot_per_var_d_mse(
+                    results=var_mse_dict,
+                    is_mixed=is_mixed,
+                    save_path=f"analyze_recon_mixed_{scale}",
+                    mode=mode
+                )
+                
+                plot_per_var_d_mse_bins(
+                    results=var_mse_dict_bins,
+                    bin_counts=bin_counts,
+                    is_mixed=is_mixed,
+                    save_path=f"analyze_recon_mixed_{scale}"
+                )
         except Exception as e:
             print(f"  Failed to process {variant_name}: {e}")
             import traceback
@@ -795,10 +881,6 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
         enc_sizes=cfg.ENCODING_SIZES, 
         save_dir=save_dir, 
         baseline_name=baseline
-    )
-
-    plot_per_var_d_mse_bins(
-
     )
 
 
@@ -831,7 +913,7 @@ def run_aggregation_disease_mse():
         is_mixed=True,
         variant_char='_lim'
     )
-    
+    print("##############3 IM HERE ##############")
     aggregate_and_plot_disease_branch_variants(
         variants_dict=variants,
         labels_dict=labels_dict,
@@ -854,7 +936,7 @@ if __name__ == '__main__':
     print("Starting Analysis Pipeline...")
 
     run_aggregation_disease_mse()
-    
+    raise
     # variants = {
     #     # 'Simple': '',
     #     'Theta Limit (0.7)': 'theta_lim_0.7',
