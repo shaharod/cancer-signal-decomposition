@@ -3,6 +3,7 @@
 import utils.analysis_utils as au
 import utils.data_utils as du
 import utils.model_utils as mu
+import model_interpretability_copy as mi
 import config as cfg
 import os
 from pathlib import Path
@@ -12,7 +13,23 @@ import numpy as np
 
 SCALED = True
 UNSCALED = False
+variants = {
+        'Theta Limit (0.7)': 'theta_lim_0.7',
+        'Diff DP': 'dif_dp',
+        'Diff HP': 'dif_hp'
+    }
+variants_t= {
+        # 'Theta Limit (0.7)': 'theta_lim_0.7',
+        'Theta Noise 0.001': 'theta_0.001',
+        'Theta Noise 0.005': 'theta_0.005',
+        'Theta Noise 0.01': 'theta_0.01',
+        'Theta Noise 0.1': 'theta_0.1',
+    }
 
+variants_lim = {
+        'No Theta Limit' : 'no_theta_lim',
+        'Theta Limit (0.7)': 'theta_lim_0.7'
+    }
 def collect_phase_data(phase, model_labels, is_mixed):
     """
     getting trained models history and data from models
@@ -167,19 +184,32 @@ def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, tru
     and calculates MSE against the pure disease target for a single variant.
     """
     variant_results = {}
-    
+    variant_results_bins = {}
+    bin_counts = {bin_name: np.sum(mask) for bin_name, mask in theta_bins.items()}
     # Isolate ONLY the sample IDs that are true disease samples
-    disease_test_indices = test_df_full.index.intersection(true_disease_input.index)
-    benchmark_truth = true_disease_input.loc[disease_test_indices].values
-    disease_row_locs = [test_df_full.index.get_loc(idx) for idx in disease_test_indices]
+    disease_mask = test_df_full.index.isin(true_disease_input.index)
+    test_df_disease = test_df_full[disease_mask]
 
+    # 2. Get the valid indices to align the truth matrix
+    # valid_disease_indices = test_df_full.index[disease_mask]
+    benchmark_truth = true_disease_input.reindex(test_df_disease.index).values
+    thetas = test_df_disease['theta_value'].values
+    
+    theta_bins = {
+        'Low (<0.33)': (thetas >= 0.0) & (thetas < 0.33),
+        'Med (0.33-0.66)': (thetas >= 0.33) & (thetas < 0.66),
+        'High (>0.66)': (thetas >= 0.66) & (thetas <= 1.0)
+    }
+    bin_counts = {bin_name: np.sum(mask) for bin_name, mask in theta_bins.items()}
     for base_name, models in labels_dict.items():
         variant_results[base_name] = {}
+        variant_results_bins[base_name] = {}
         
         for enc in cfg.ENCODING_SIZES:
             for model_label, folder_tag in models.items():
                 if model_label not in variant_results[base_name]:
                     variant_results[base_name][model_label] = {}
+                    variant_results_bins[base_name][model_label] = {bin_name: {} for bin_name in theta_bins.keys()}
                     
                 try:
                     model_outputs = inference_cache[base_name][enc].get(model_label)
@@ -190,15 +220,25 @@ def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, tru
                     
                     # Convert to numpy and inverse scale if necessary
                     if scale_bool and scaler is not None:
-                        import utils.data_utils as du # Ensure du is available
                         print("calling inverse scale")
                         recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
                     else:
                         recon_final = recon_d.detach().cpu().numpy()
                         
                     # Slice out ONLY the true disease samples
-                    recon_disease_only = recon_final[disease_row_locs]
+                    recon_disease_only = recon_final[disease_mask]
                     
+                    for bin_name, bin_mask in theta_bins.items():
+                        # Skip if a bin has no samples (can happen in 'fixed 0.5' mode)
+                        if not np.any(bin_mask):
+                            continue
+                            
+                        truth_binned = benchmark_truth[bin_mask]
+                        recon_binned = recon_disease_only[bin_mask]
+                        
+                        bin_mse = np.mean((truth_binned - recon_binned) ** 2)
+                        variant_results_bins[base_name][model_label][bin_name][enc] = bin_mse
+                        
                     # Calculate Global MSE against the pure disease truth
                     global_mse = np.mean((benchmark_truth - recon_disease_only) ** 2)
                     variant_results[base_name][model_label][enc] = global_mse
@@ -207,7 +247,7 @@ def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, tru
                     print(f"Error calculating Disease MSE for {base_name}-{model_label}-{enc}: {e}")
                     continue
                     
-    return variant_results
+    return variant_results, variant_results_bins
 
 def plot_disease_variant_multi_model_grid(master_variant_data, enc_sizes, save_dir, baseline_name):
     """
@@ -618,6 +658,65 @@ def aggregate_and_plot_variants(baseline='PCA', target_models=['basic','layered'
         for enc in target_encodings_to_plot:
             plot_variant_curves(master_data, target_enc=enc, model_key=f"{target_model_dict[target_model]}", save_dir=save_dir, phase=phase)
 
+def plot_per_var_d_mse_bins(results, bin_counts, is_mixed, save_path):
+    n_subplots = len(results)
+    fig, axes = plt.subplots(1, n_subplots, figsize=(9 * n_subplots, 7), sharey=False)
+    if n_subplots == 1: axes = [axes]
+    
+    # Base colors for models
+    color_map = {'basic': '#1f77b4', 'layered': '#2ca02c', 'pca': '#EC7063'}
+    # Line styles for theta bins
+    style_map = {'Low (<0.33)': 'dotted', 'Med (0.33-0.66)': 'dashed', 'High (>0.66)': 'solid'}
+    
+    for ax, (base_name, models_dict) in zip(axes, results.items()):
+        
+        for model_label, bin_dict in models_dict.items():
+            # Get base color for the model
+            m_color = next((v for k, v in color_map.items() if k in model_label.lower()), 'gray')
+            
+            for bin_name, enc_dict in bin_dict.items():
+                if not enc_dict: continue
+                
+                valid_encodings = sorted(list(enc_dict.keys()))
+                y_values = [enc_dict[enc] for enc in valid_encodings]
+                
+                l_style = style_map.get(bin_name, 'solid')
+                n_samples = bin_counts[bin_name]
+                label_text = f"{model_label} [{bin_name} | N={n_samples}]"
+                # Plot the binned line
+                ax.plot(valid_encodings, y_values, 
+                        label=label_text, 
+                        color=m_color, 
+                        linestyle=l_style,
+                        marker='o', 
+                        linewidth=2, markersize=6)
+
+                # Add Data Labels (optional, might get crowded with 9 lines, you can comment this loop out if it's too messy)
+                for x_val, y_val in zip(valid_encodings, y_values):
+                    ax.annotate(f'{y_val:.0f}', (x_val, y_val), textcoords="offset points", 
+                                xytext=(0,10), ha='center', fontsize=8)
+
+        # Formatting Subplot
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(cfg.ENCODING_SIZES)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        
+        # Move legend outside to prevent overlapping lines
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    fig.suptitle(f"Disease MSE by Theta Bins vs Encoding Size", fontsize=18, y=1.05)
+    plt.tight_layout()
+    # plt.show()
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    os.makedirs(out_folder, exist_ok=True)
+    output_path = out_folder / f"{save_path}_disease_mse_by_theta.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Theta Binned Test MSE Line Plot to {output_path}")
 
 def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, baseline='PCA', 
                                                mode='true', is_mixed=True, variant_char=''):
@@ -667,7 +766,7 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
                 print(f"########3 CALCLUATING DISEASE MSE FOR {'UNSCALED' if not scale_bool else 'SCALED'}")
                 print(f"pipeline is for {single_pipeline_dict.keys()}")
                 # 4. Calculate Isolated Disease MSE
-                var_mse_dict = calculate_disease_branch_mse(
+                var_mse_dict, var_mse_dict_bins = calculate_disease_branch_mse(
                     labels_dict=single_pipeline_dict, 
                     inference_cache=cache, 
                     test_df_full=test_df_full, 
@@ -698,25 +797,14 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
         baseline_name=baseline
     )
 
+    plot_per_var_d_mse_bins(
+
+    )
+
+
 
 def run_aggregation_disease_mse():
-    variants = {
-        'Theta Limit (0.7)': 'theta_lim_0.7',
-        'Diff DP': 'dif_dp',
-        'Diff HP': 'dif_hp'
-    }
-    variants_t= {
-        # 'Theta Limit (0.7)': 'theta_lim_0.7',
-        'Theta Noise 0.001': 'theta_0.001',
-        'Theta Noise 0.005': 'theta_0.005',
-        'Theta Noise 0.01': 'theta_0.01',
-        'Theta Noise 0.1': 'theta_0.1',
-    }
-
-    variants_lim = {
-        'No Theta Limit' : 'no_theta_lim',
-        'Theta Limit (0.7)': 'theta_lim_0.7'
-    }
+    
     
     baseline = 'PCA'
     
@@ -761,31 +849,32 @@ def run_aggregation_disease_mse():
     )
 
 
+
 if __name__ == '__main__':
     print("Starting Analysis Pipeline...")
 
     run_aggregation_disease_mse()
     
-    variants = {
-        # 'Simple': '',
-        'Theta Limit (0.7)': 'theta_lim_0.7',
-        'Diff DP': 'dif_dp',
-        'Diff HP': 'dif_hp'
-    }
+    # variants = {
+    #     # 'Simple': '',
+    #     'Theta Limit (0.7)': 'theta_lim_0.7',
+    #     'Diff DP': 'dif_dp',
+    #     'Diff HP': 'dif_hp'
+    # }
 
-    variants_t = {
-        # 'Simple': '',
-        # 'Theta Limit (0.7)': 'theta_lim_0.7',
-        'Theta Noise 0.001': 'theta_0.001',
-        'Theta Noise 0.005': 'theta_0.005',
-        'Theta Noise 0.01': 'theta_0.01',
-        'Theta Noise 0.1' : 'theta_0.1'
-    }
+    # variants_t = {
+    #     # 'Simple': '',
+    #     # 'Theta Limit (0.7)': 'theta_lim_0.7',
+    #     'Theta Noise 0.001': 'theta_0.001',
+    #     'Theta Noise 0.005': 'theta_0.005',
+    #     'Theta Noise 0.01': 'theta_0.01',
+    #     'Theta Noise 0.1' : 'theta_0.1'
+    # }
 
-    variants_lim = {
-        'No Theta Limit' : 'no_theta_lim',
-        'Theta Limit (0.7)': 'theta_lim_0.7'
-    }
+    # variants_lim = {
+    #     'No Theta Limit' : 'no_theta_lim',
+    #     'Theta Limit (0.7)': 'theta_lim_0.7'
+    # }
     
     # ---------------------------------------------------------
     # THE NEW CROSS-VARIANT COMPARISON PIPELINE
