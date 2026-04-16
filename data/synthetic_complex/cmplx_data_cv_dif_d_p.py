@@ -103,8 +103,11 @@ def show(title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, aspect=Fals
 # Loading data
 ### Resolving Path issue
 from pathlib import Path
-
+import sys
+# samples files
 script_dir = Path(__file__).resolve().parent
+project_root = Path(__file__).resolve().parent.parent.parent
+sys.path.append(str(project_root))
 # samples files
 # healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
 # diseaseA_path = Path('../../data/real/GeneMatrix_H3K4me3_crc.csv')
@@ -125,99 +128,135 @@ theta_B_path = (script_dir / '../../data/real/SCLC_theta.csv').resolve()
 print(f'{healthy_path}')
 ### Load read data
 import pandas as pd
-def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Ensures each patient is represented only once by randomly 
-    selecting one sample per patient ID (prefix before '_').
-    """
-    patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
-    return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
+import utils.data_utils as du
+
 
 # loading real data
 df_real_healthy = pd.read_csv(healthy_path, index_col=0)
 df_real_cancerA = pd.read_csv(diseaseA_path, index_col=0)
 df_real_cancerB = pd.read_csv(diseaseB_path, index_col=0)
 
+df_clean_cancerA = du.clean_rows(df_real_cancerA.T).T
+df_clean_cancerB = du.clean_rows(df_real_cancerB.T).T
+
+print(f"Cancer A samples before: {df_real_cancerA.shape[1]}, after cleaning: {df_clean_cancerA.shape[1]}")
+print(f"Cancer B samples before: {df_real_cancerB.shape[1]}, after cleaning: {df_clean_cancerB.shape[1]}")
+
 # loading thetas
 metadata_A = pd.read_csv(theta_A_path)
 metadata_B = pd.read_csv(theta_B_path)
+
+valid_samples_A = df_clean_cancerA.columns
+valid_samples_B = df_clean_cancerB.columns
+
+# Filter the metadata DataFrames using .isin()
+# This ensures we only keep the theta values for samples that still exist in our clean matrices
+metadata_A = metadata_A[metadata_A['Unnamed: 0'].isin(valid_samples_A)].copy()
+metadata_B = metadata_B[metadata_B['Unnamed: 0'].isin(valid_samples_B)].copy()
+
+# Reset the index of the metadata so it's clean (optional but good practice)
+metadata_A.reset_index(drop=True, inplace=True)
+metadata_B.reset_index(drop=True, inplace=True)
+
+print(f"Metadata A aligned. Remaining thetas: {len(metadata_A)}")
+print(f"Metadata B aligned. Remaining thetas: {len(metadata_B)}")
+
 # Creating Profiles
 # average healthy data
-df_healthy_pool = clean_rows(df_real_healthy.T).T
-healthy_matrix = df_healthy_pool.values
-num_pool_samples = healthy_matrix.shape[1]
-print(df_healthy_pool.shape)
-# print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
-raise
-# extract max sample for disease A
-max_idx_A = metadata_A['data_list'].idxmax()
-sample_A = metadata_A.loc[max_idx_A, 'Unnamed: 0']
-theta_A = metadata_A.loc[max_idx_A, 'data_list']
-blueprint_A_mixed = df_real_cancerA[sample_A].values
-print(f"blueprint DiseaseA sum is: {blueprint_A_mixed.sum()}")
+blueprint_healthy = df_real_healthy.mean(axis=1).values
+print(blueprint_healthy)
+print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
 
-# extract max sample for disease B
-max_idx_B = metadata_B['data_list'].idxmax()
-sample_B = metadata_B.loc[max_idx_B, 'Unnamed: 0']
-theta_B = metadata_B.loc[max_idx_B, 'data_list']
-print(f"Healthy profile: Averaged {df_real_healthy.shape[1]} samples.")
-print(f"Disease A Max - Sample: {sample_A}, Theta: {theta_A:.4f}")
-print(f"Disease B Max - Sample: {sample_B}, Theta: {theta_B:.4f}")
-blueprint_B_mixed = df_real_cancerB[sample_B].values
-print(f"blueprint DiseaseB sum is: {blueprint_B_mixed.sum()}")
+threshold = 0.65
+max_diff = 2
+
+# --- Disease A (CRC) ---
+# Filter metadata for high theta samples
+high_theta_A_meta = metadata_A[metadata_A['data_list'] >= threshold]
+
+# print(f"Found {len(samples_A)} Disease A samples with theta >= {threshold}")
 
 
-print(f"BlueprintAMixed is {blueprint_A_mixed} with shape {blueprint_A_mixed.shape}")
-print(f"BlueprintBMixed is {blueprint_B_mixed} with shape {blueprint_B_mixed.shape}")
-### Isolting Cancer
-universal_h_baseline = df_healthy_pool.mean(axis=1).values
-# isolating disease A
-pure_disease_A = (blueprint_A_mixed - (1 - theta_A) * universal_h_baseline) / theta_A
-pure_disease_A = pure_disease_A.clip(min=0)
 
-# isolating disease B
-pure_disease_B = (blueprint_B_mixed - (1 - theta_B) * universal_h_baseline) / theta_B
-pure_disease_B = pure_disease_B.clip(min=0)
 
-print("Successfully isolated pure Disease A and Disease B profiles.")
+# --- Disease B (SCLC) ---
+# Filter metadata for high theta samples
+high_theta_B_meta = metadata_B[metadata_B['data_list'] >= threshold]
+
+# print(f"Found {len(samples_B)} Disease B samples with theta >= {threshold}")
+
+
+n_A = len(high_theta_A_meta)
+n_B = len(high_theta_B_meta)
+
+print(f"Initial high-theta samples found -> Disease A: {n_A}, Disease B: {n_B}")
+
+# 2. Apply Diversity Balancing Constraint
+min_n = min(n_A, n_B)
+allowed_max = min_n + max_diff
+
+if n_A > allowed_max:
+    # Downsample A randomly to preserve diversity, or use .nlargest() to prioritize purity
+    high_theta_A_meta = high_theta_A_meta.sample(n=allowed_max, random_state=42)
+    print(f"Downsampled Disease A from {n_A} to {allowed_max} to balance diversity.")
+elif n_B > allowed_max:
+    # Downsample B randomly 
+    high_theta_B_meta = high_theta_B_meta.sample(n=allowed_max, random_state=42)
+    print(f"Downsampled Disease B from {n_B} to {allowed_max} to balance diversity.")
+
+samples_A = high_theta_A_meta['Unnamed: 0'].values
+# Extract their mixed profiles
+mixed_A_subset = df_real_cancerA[samples_A].values
+thetas_A_real = high_theta_A_meta['data_list'].values
+# Deconvolute EACH sample to get its pure disease profile
+# We use broadcasting [:, None] to align the 1D arrays with the 2D matrix
+pure_disease_A_matrix = (mixed_A_subset - (1 - thetas_A_real) * blueprint_healthy[:, None]) / thetas_A_real
+pure_disease_A_matrix = pure_disease_A_matrix.clip(min=0)
+
+
+samples_B = high_theta_B_meta['Unnamed: 0'].values
+thetas_B_real = high_theta_B_meta['data_list'].values
+# Deconvolute EACH sample to get its pure disease profile
+# Extract their mixed profiles
+mixed_B_subset = df_real_cancerB[samples_B].values
+pure_disease_B_matrix = (mixed_B_subset - (1 - thetas_B_real) * blueprint_healthy[:, None]) / thetas_B_real
+pure_disease_B_matrix = pure_disease_B_matrix.clip(min=0)
+
+print("Successfully isolated pure profiles for multiple high-theta Disease A and B samples.")
+
+
 ### Pure datasets
-n_genes = len(df_healthy_pool)
-if not (n_genes==len(pure_disease_A)) or not (n_genes==len(pure_disease_B)):
-    raise ValueError()
+n_genes = len(blueprint_healthy)
+
 n_healthy_samples = 300
 n_disease_A_samples = 200
 n_disease_B_samples = 200
 bio_cv = 0.1
-# healthy_std = bio_cv * blueprint_healthy
-diseaseA_std = bio_cv * pure_disease_A
-diseaseB_std = bio_cv * pure_disease_B
+healthy_std = bio_cv * blueprint_healthy
 total_healthy_needed = n_healthy_samples + n_disease_A_samples + n_disease_B_samples
 
-sampled_healthy_df = df_healthy_pool.sample(
-    n=total_healthy_needed, 
-    axis=1, 
-    replace=(total_healthy_needed > df_healthy_pool.shape[1])
-)
-
-# Extract the values. Shape will be (n_genes, 700)
-base_healthy_pool = sampled_healthy_df.values
-healthy_std = bio_cv * base_healthy_pool
 healthy_pool = np.random.normal(
-    base_healthy_pool, 
-    healthy_std, 
-    size=(n_genes, total_healthy_needed)
+    blueprint_healthy[:, None], healthy_std[:, None], size=(n_genes, total_healthy_needed)
 ).clip(min=0)
 
-disease_A_pool = np.random.normal(
-    pure_disease_A[:, None], diseaseA_std[:, None], size=(n_genes, n_disease_A_samples)
-).clip(min=0)
+# Randomly sample columns (patient profiles) from our pure matrices to reach the required count.
+# We use replace=True in case we need more samples than we filtered out.
+idx_A = np.random.choice(pure_disease_A_matrix.shape[1], size=n_disease_A_samples, replace=True)
+base_disease_A = pure_disease_A_matrix[:, idx_A]
 
-disease_B_pool = np.random.normal(
-    pure_disease_B[:, None], diseaseB_std[:, None], size=(n_genes, n_disease_B_samples)
-).clip(min=0)
+idx_B = np.random.choice(pure_disease_B_matrix.shape[1], size=n_disease_B_samples, replace=True)
+base_disease_B = pure_disease_B_matrix[:, idx_B]
+
+# Apply biological jitter to simulate slight variations (even if a patient is sampled twice)
+diseaseA_std = bio_cv * base_disease_A
+disease_A_pool = np.random.normal(base_disease_A, diseaseA_std, size=(n_genes, n_disease_A_samples)).clip(min=0)
+
+diseaseB_std = bio_cv * base_disease_B
+disease_B_pool = np.random.normal(base_disease_B, diseaseB_std, size=(n_genes, n_disease_B_samples)).clip(min=0)
+
+print(f"Disease pools created: Disease A ({disease_A_pool.shape}), Disease B ({disease_B_pool.shape})")
 
 pure_healthy_data = healthy_pool[:, :n_healthy_samples]
-
 
 print(f"Pools created: Healthy ({healthy_pool.shape}), Disease A ({disease_A_pool.shape}), Disease B ({disease_B_pool.shape})")
 def apply_sequencing_noise(clean_matrix):
@@ -362,27 +401,27 @@ from sklearn.decomposition import PCA
 raw_uniform_data = combined_mixed_uniform_df.drop('disease_type').values.T 
 
 # 2. Run PCA directly on the raw, noisy sequence counts
-pca_coords_uniform = PCA(n_components=2).fit_transform(raw_uniform_data)
+# pca_coords_uniform = PCA(n_components=2).fit_transform(raw_uniform_data)
 
 # 3. Plot it using the custom functions at the top of your script
 # Coloring by 'all_thetas' to see the continuous gradients (the "lines")
-ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
-                   c=all_thetas, cmap='magma', return_scat_obj=True, diag=False)
+# ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
+#                    c=all_thetas, cmap='magma', return_scat_obj=True, diag=False)
 
-# Add a colorbar and labels
-plt.colorbar(scat, label="Theta (Tumor Fraction)")
-show(title="Raw Data PCA: Uniform Theta (The 'Lines')", 
-     xlabel="PC1", ylabel="PC2", aspect=True)
-## Raw Data PCA: Uniform Theta by Disease Type
-# 1. Plot using disease_type (all_labels) instead of theta
-# Set diag=False to remove the weird black line!
-ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
-                   c=all_labels, cmap='tab10', diag=False, return_scat_obj=True)
+# # Add a colorbar and labels
+# plt.colorbar(scat, label="Theta (Tumor Fraction)")
+# show(title="Raw Data PCA: Uniform Theta (The 'Lines')", 
+#      xlabel="PC1", ylabel="PC2", aspect=True)
+# ## Raw Data PCA: Uniform Theta by Disease Type
+# # 1. Plot using disease_type (all_labels) instead of theta
+# # Set diag=False to remove the weird black line!
+# ax, scat = scatter(pca_coords_uniform[:, 0], pca_coords_uniform[:, 1], 
+#                    c=all_labels, cmap='tab10', diag=False, return_scat_obj=True)
 
-# 2. Add a legend for the discrete disease types
-# Since tab10 is categorical, a legend works better than a colorbar
-handles, _ = scat.legend_elements(prop="colors")
-ax.legend(handles, ["Disease A (CRC)", "Disease B (SCLC)"], title="Disease Type")
+# # 2. Add a legend for the discrete disease types
+# # Since tab10 is categorical, a legend works better than a colorbar
+# handles, _ = scat.legend_elements(prop="colors")
+# ax.legend(handles, ["Disease A (CRC)", "Disease B (SCLC)"], title="Disease Type")
 
-show(title="Raw Data PCA: Uniform Theta by Disease Type", 
-     xlabel="PC1", ylabel="PC2", aspect=True)
+# show(title="Raw Data PCA: Uniform Theta by Disease Type", 
+#      xlabel="PC1", ylabel="PC2", aspect=True)

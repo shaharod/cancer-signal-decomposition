@@ -78,7 +78,9 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
 
 def inverse_scale(scaler, tensor):
     """Converts a tensor back to original units."""
+
     if scaler is None: return tensor
+    print('############### IM HERE TO INVERSE SCALE ###############')
     array = tensor.detach().cpu().numpy()
     unscaled = scaler.inverse_transform(array)
     return torch.tensor(unscaled, dtype=torch.float32)
@@ -294,4 +296,36 @@ def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", i
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     return train_tensor, test_tensor, scaler
+
+
+
+############ added so i can use in new analyzer stuff from interpretability
+
+def load_reconstruction_data(phase, mode):
+    """
+    Loads the validation data (Mixed Input and Clean Ground Truth).
+    Matches your requested structure using config paths.
+    """
+    if phase == "healthy":
+        mix_file = cfg.HEALTHY_GENES_PATH  # Input is pure healthy data
+        truth_file = cfg.HEALTHY_GENES_PATH
+    else:
+        mix_file =cfg.get_disease_gene_path(mode)  # Input is mixed data
+        truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
+    print(f"truth_file: {truth_file}")
+    print(f"mix file: {mix_file}")
+    # 2. Validation
+    if not mix_file.exists():
+        print(f"⚠️ Warning: Reconstruction data not found:\n {mix_file}")
+        return None, None
+    if not truth_file.exists():
+        print(f"⚠️ Warning: truth file data not found:\n {truth_file}")
+        return None, None
+        
+    # Load & Transpose (Genes should be columns for the model)
+    # Using 'T' because typically gene files are (Genes x Samples), but models expect (Samples x Genes)
+    df_mixed = pd.read_csv(mix_file, index_col=0).T
+    df_pure  = pd.read_csv(truth_file, index_col=0).T
+    
+    return df_mixed, df_pure
 

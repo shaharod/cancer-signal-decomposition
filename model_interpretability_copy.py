@@ -862,13 +862,7 @@ def plot_disease_reconstruction_mse_lines(labels_dict, inference_cache, test_df_
     Calculates the global Test MSE for Disease Branch Reconstruction from the inference cache
     and plots it as a line graph (Test MSE vs. Encoding Size) with subplots for each base_name.
     """
-    # _, true_healthy = load_reconstruction_data('healthy', mode)
-    # test_df_full.drop
-    # # Pre-calculate the truth matrix
-    # test_truth_d = true_disease_input.reindex(test_df_full.index)
-    # test_truth_h = true_healthy.reindex(test_df_full.index)
-    # benchmark_truth = test_truth_d.fillna(test_truth_h).values
-    
+   
     # ---------------------------------------------------------
     # 1. EXTRACT DATA AND CALCULATE MSE
     # Structure: master_results[base_name][model_label][enc_size] = mse_val
@@ -1018,6 +1012,7 @@ def plot_disease_reconstruction_mse_by_theta(labels_dict, inference_cache, test_
         'Med (0.33-0.66)': (thetas >= 0.33) & (thetas < 0.66),
         'High (>0.66)': (thetas >= 0.66) & (thetas <= 1.0)
     }
+    bin_counts = {bin_name: np.sum(mask) for bin_name, mask in theta_bins.items()}
     # theta_bins = {
     #     'low (<0.5)': (thetas >=0.0) & (thetas < 0.5),
     #     'high ( >=0.5)': (thetas >=0.5) & (thetas <= 1.0)
@@ -1091,10 +1086,11 @@ def plot_disease_reconstruction_mse_by_theta(labels_dict, inference_cache, test_
                 y_values = [enc_dict[enc] for enc in valid_encodings]
                 
                 l_style = style_map.get(bin_name, 'solid')
-                
+                n_samples = bin_counts[bin_name]
+                label_text = f"{model_label} [{bin_name} | N={n_samples}]"
                 # Plot the binned line
                 ax.plot(valid_encodings, y_values, 
-                        label=f"{model_label} [{bin_name}]", 
+                        label=label_text, 
                         color=m_color, 
                         linestyle=l_style,
                         marker='o', 
@@ -1167,21 +1163,31 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
 
-    if is_mixed:
-        print("🎨 Drawing disease recon mse...")
-        # plot_disease_reconstruction_mse_by_theta
-        plot_disease_reconstruction_mse_by_theta(labels_dict=labels_dict,
-                                           inference_cache=inference_cache,
-                                           test_df_full=test_df_full,
-                                           true_disease_input=true_disease,
-                                           scaler=scaler,
-                                           scale_bool=scale_bool,
-                                           save_path=save_path, 
-                                           mode=mode,
-                                           is_mixed=is_mixed)
-        
-        print("🎨 Drawing Disease Drivers...")
-        analyze_disease_drivers_grid(
+    print("🎨 Drawing disease recon mse...")
+    # plot_disease_reconstruction_mse_by_theta
+    plot_disease_reconstruction_mse_lines(labels_dict=labels_dict,
+                                        inference_cache=inference_cache,
+                                        test_df_full=test_df_full,
+                                        true_disease_input=true_disease,
+                                        scaler=scaler,
+                                        scale_bool=scale_bool,
+                                        save_path=save_path, 
+                                        mode=mode,
+                                        is_mixed=is_mixed)
+    
+    print("🎨 Drawing disease recon mse by theta...")
+    plot_disease_reconstruction_mse_by_theta(labels_dict=labels_dict,
+                                        inference_cache=inference_cache,
+                                        test_df_full=test_df_full,
+                                        true_disease_input=true_disease,
+                                        scaler=scaler,
+                                        scale_bool=scale_bool,
+                                        save_path=save_path, 
+                                        mode=mode,
+                                        is_mixed=is_mixed)
+    
+    print("🎨 Drawing Disease Drivers...")
+    analyze_disease_drivers_grid(
             labels_dict=labels_dict,
             inference_cache=inference_cache,
             test_df_full=test_df_full,
@@ -1193,23 +1199,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
             top_n=10,  # Shows top 10 up and top 10 down per subplot
             is_mixed=is_mixed                    
         )
-    
-    print("🎨 Drawing Total Mix Scatter Plots...")
-    analyze_total_reconstruction(
-        labels_dict=labels_dict, 
-        inference_cache=inference_cache, 
-        test_df_full=test_df_full, 
-        test_n_theta=test_no_theta_t,
-        gene_size=actual_gene_size, 
-        scaler=scaler,
-        scale_bool=scale_bool, 
-        save_path=save_path+"_total", 
-        mode=mode, 
-        is_simple=is_simple, 
-        is_mixed=is_mixed
-    )
-    
-
+    return
     print("🎨 Drawing Disease Branch Scatter Plots...")
     analyze_disease_portion_reconstruction_scatter(
         labels_dict=labels_dict, 
@@ -1225,6 +1215,25 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         ,
         is_mixed=is_mixed
     )
+
+    print("🎨 Drawing Total Mix Scatter Plots...")
+    analyze_total_reconstruction(
+        labels_dict=labels_dict, 
+        inference_cache=inference_cache, 
+        test_df_full=test_df_full, 
+        test_n_theta=test_no_theta_t,
+        gene_size=actual_gene_size, 
+        scaler=scaler,
+        scale_bool=scale_bool, 
+        save_path=save_path+"_total", 
+        mode=mode, 
+        is_simple=is_simple, 
+        is_mixed=is_mixed
+    )
+    
+    
+    
+
     
     print("✅ All analyses and visualizations complete!\n")
 
@@ -1264,9 +1273,9 @@ if __name__ == '__main__':
     cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_uniform_theta.csv"
     print("########### RUNNING MIX MODEL UNIFORM THETA ############")
     interpret_disease_mix(mode="true")
-    cfg.FIXED_THETA_EXP = True
-    cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_theta05.csv"
-    print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
-    interpret_disease_mix(mode="fixed")
+    # cfg.FIXED_THETA_EXP = True
+    # cfg.DISEASE_GENES_PATH = cfg.DATA_SUB / "disease_data_theta05.csv"
+    # print("########### RUNNING MIX MODEL FIXED 0.5 THETA ############")
+    # interpret_disease_mix(mode="fixed")
 
 

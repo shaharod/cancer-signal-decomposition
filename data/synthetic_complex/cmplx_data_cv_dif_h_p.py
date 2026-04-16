@@ -146,9 +146,8 @@ metadata_B = pd.read_csv(theta_B_path)
 df_healthy_pool = clean_rows(df_real_healthy.T).T
 healthy_matrix = df_healthy_pool.values
 num_pool_samples = healthy_matrix.shape[1]
-print(df_healthy_pool.shape)
 # print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
-raise
+
 # extract max sample for disease A
 max_idx_A = metadata_A['data_list'].idxmax()
 sample_A = metadata_A.loc[max_idx_A, 'Unnamed: 0']

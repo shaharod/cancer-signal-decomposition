@@ -116,28 +116,36 @@ sys.path.append(str(project_root))
 # # thetas files
 # theta_A_path = Path('../../data/real/theta_CRC_passedQC.csv')
 # theta_B_path = Path('../../data/real/SCLC_theta.csv')
+def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensures each patient is represented only once by randomly 
+    selecting one sample per patient ID (prefix before '_').
+    """
+    patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
+    return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
 
-healthy_path = (script_dir / '../../data/real/GeneMatrix_H3K4me3_healthy.csv').resolve()
-diseaseA_path = (script_dir / '../../data/real/GeneMatrix_H3K4me3_crc.csv').resolve()
-diseaseB_path = (script_dir / '../../data/real/GeneMatrix_H3K4me3_sclc.csv').resolve()
+healthy_path = (script_dir / '../../real/GeneMatrix_H3K4me3_healthy.csv').resolve()
+diseaseA_path = (script_dir / '../../real/GeneMatrix_H3K4me3_crc.csv').resolve()
+diseaseB_path = (script_dir / '../../real/GeneMatrix_H3K4me3_sclc.csv').resolve()
 
 # thetas files
-theta_A_path = (script_dir / '../../data/real/theta_CRC_passedQC.csv').resolve()
-theta_B_path = (script_dir / '../../data/real/SCLC_theta.csv').resolve()
+theta_A_path = (script_dir / '../../real/theta_CRC_passedQC.csv').resolve()
+theta_B_path = (script_dir / '../../real/SCLC_theta.csv').resolve()
 
 print(f'{healthy_path}')
 ### Load read data
 import pandas as pd
-import utils.data_utils as du
 
+threshold = 0.65
+max_diff = 2
 
 # loading real data
 df_real_healthy = pd.read_csv(healthy_path, index_col=0)
 df_real_cancerA = pd.read_csv(diseaseA_path, index_col=0)
 df_real_cancerB = pd.read_csv(diseaseB_path, index_col=0)
 
-df_clean_cancerA = du.clean_rows(df_real_cancerA.T).T
-df_clean_cancerB = du.clean_rows(df_real_cancerB.T).T
+df_clean_cancerA = clean_rows(df_real_cancerA.T).T
+df_clean_cancerB = clean_rows(df_real_cancerB.T).T
 
 print(f"Cancer A samples before: {df_real_cancerA.shape[1]}, after cleaning: {df_clean_cancerA.shape[1]}")
 print(f"Cancer B samples before: {df_real_cancerB.shape[1]}, after cleaning: {df_clean_cancerB.shape[1]}")
@@ -145,6 +153,49 @@ print(f"Cancer B samples before: {df_real_cancerB.shape[1]}, after cleaning: {df
 # loading thetas
 metadata_A = pd.read_csv(theta_A_path)
 metadata_B = pd.read_csv(theta_B_path)
+
+dropped_samples_A = set(df_real_cancerA.columns) - set(df_clean_cancerA.columns)
+dropped_samples_B = set(df_real_cancerB.columns) - set(df_clean_cancerB.columns)
+
+# Find high-theta samples in the RAW metadata
+raw_high_theta_A = set(metadata_A[metadata_A['data_list'] >= threshold]['Unnamed: 0'])
+raw_high_theta_B = set(metadata_B[metadata_B['data_list'] >= threshold]['Unnamed: 0'])
+
+# Intersect to see how many high-theta samples we lost to the cleaning function
+lost_high_theta_A = raw_high_theta_A.intersection(dropped_samples_A)
+lost_high_theta_B = raw_high_theta_B.intersection(dropped_samples_B)
+
+print(f"\n--- QC: Missed Opportunities ---")
+print(f"Disease A: Lost {len(lost_high_theta_A)} high-theta samples during cleaning.")
+print(f"Disease B: Lost {len(lost_high_theta_B)} high-theta samples during cleaning.")
+# Note: If this number is high, you may need to adjust `clean_rows` to prefer keeping 
+# the duplicate with the highest theta, rather than random/first dropping.
+# ---------------------------------------------------------
+# Extract and Print the Lost High-Theta Samples
+# ---------------------------------------------------------
+
+# Filter the raw metadata to only include the lost samples
+lost_details_A = metadata_A[metadata_A['Unnamed: 0'].isin(lost_high_theta_A)]
+lost_details_B = metadata_B[metadata_B['Unnamed: 0'].isin(lost_high_theta_B)]
+
+# Rename columns just for a cleaner printout
+lost_details_A = lost_details_A.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
+lost_details_B = lost_details_B.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
+
+print("\n--- Details of Lost High-Theta Samples: Disease A ---")
+if lost_details_A.empty:
+    print("No high-theta samples lost! Perfect.")
+else:
+    # Sort by Theta descending so you see the biggest losses first
+    lost_details_A = lost_details_A.sort_values(by='Theta', ascending=False)
+    print(lost_details_A[['Sample_ID', 'Theta']].to_string(index=False))
+
+print("\n--- Details of Lost High-Theta Samples: Disease B ---")
+if lost_details_B.empty:
+    print("No high-theta samples lost! Perfect.")
+else:
+    lost_details_B = lost_details_B.sort_values(by='Theta', ascending=False)
+    print(lost_details_B[['Sample_ID', 'Theta']].to_string(index=False))
 
 valid_samples_A = df_clean_cancerA.columns
 valid_samples_B = df_clean_cancerB.columns
@@ -158,17 +209,21 @@ metadata_B = metadata_B[metadata_B['Unnamed: 0'].isin(valid_samples_B)].copy()
 metadata_A.reset_index(drop=True, inplace=True)
 metadata_B.reset_index(drop=True, inplace=True)
 
+
+# Rename the column back to something sensible for clarity
+metadata_A.rename(columns={'index': 'Sample_ID'}, inplace=True)
+metadata_B.rename(columns={'index': 'Sample_ID'}, inplace=True)
 print(f"Metadata A aligned. Remaining thetas: {len(metadata_A)}")
 print(f"Metadata B aligned. Remaining thetas: {len(metadata_B)}")
-
+# assert list(metadata_A['Sample_ID']) == list(df_clean_cancerA.columns), "FATAL: Disease A Metadata and Matrix are misaligned!"
+# assert list(metadata_B['Sample_ID']) == list(df_clean_cancerB.columns), "FATAL: Disease B Metadata and Matrix are misaligned!"
+raise
 # Creating Profiles
 # average healthy data
 blueprint_healthy = df_real_healthy.mean(axis=1).values
 print(blueprint_healthy)
 print(f"blueprint healthy sum is: {blueprint_healthy.sum()}")
 
-threshold = 0.65
-max_diff = 2
 
 # --- Disease A (CRC) ---
 # Filter metadata for high theta samples
