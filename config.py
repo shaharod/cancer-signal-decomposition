@@ -9,13 +9,13 @@ DATA_PATH = PROJECT_ROOT / 'data'
 # ---- Global Decisions ----
 RANDOM_THETA_EXP = False
 FIXED_THETA_EXP = False
-SYNTHETIC_DATA = True
+SYNTHETIC_DATA = False
 SYN_HP = False
-SYN_DP = False
-SYN_1T = True
+SYN_DP = True
+SYN_1T = False
 SYN_01T = False
 SYN_001T = False
-SYN_005T =  True
+SYN_005T =  False
 SYN_TLIM = False
 SYN_T_NO_LIM = False
 SYN_SIMPLE = False
