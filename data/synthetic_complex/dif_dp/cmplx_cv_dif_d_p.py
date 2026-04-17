@@ -149,6 +149,20 @@ df_clean_cancerB = clean_rows(df_real_cancerB.T).T
 
 print(f"Cancer A samples before: {df_real_cancerA.shape[1]}, after cleaning: {df_clean_cancerA.shape[1]}")
 print(f"Cancer B samples before: {df_real_cancerB.shape[1]}, after cleaning: {df_clean_cancerB.shape[1]}")
+num = 1000
+rows_over_num_a= df_real_cancerA.index[(df_real_cancerA > num).any(axis=1)]
+
+print(f"Rows of cancer a with values > {num}:", rows_over_num_a.tolist())
+rows_over_num_b= df_real_cancerB.index[(df_real_cancerB > num).any(axis=1)]
+
+print(f"Rows of cancer b with values > {num}:", rows_over_num_b.tolist())
+
+rows_over_num_a= df_clean_cancerA.index[(df_clean_cancerA > num).any(axis=1)]
+
+print(f"Rows of clean cancer a with values > {num}:", rows_over_num_a.tolist())
+rows_over_num_b= df_clean_cancerB.index[(df_clean_cancerB > num).any(axis=1)]
+
+print(f"Rows of clean cancer b with values > {num}:", rows_over_num_b.tolist())
 
 # loading thetas
 metadata_A = pd.read_csv(theta_A_path)
@@ -157,45 +171,45 @@ metadata_B = pd.read_csv(theta_B_path)
 dropped_samples_A = set(df_real_cancerA.columns) - set(df_clean_cancerA.columns)
 dropped_samples_B = set(df_real_cancerB.columns) - set(df_clean_cancerB.columns)
 
-# Find high-theta samples in the RAW metadata
-raw_high_theta_A = set(metadata_A[metadata_A['data_list'] >= threshold]['Unnamed: 0'])
-raw_high_theta_B = set(metadata_B[metadata_B['data_list'] >= threshold]['Unnamed: 0'])
+# # Find high-theta samples in the RAW metadata
+# raw_high_theta_A = set(metadata_A[metadata_A['data_list'] >= threshold]['Unnamed: 0'])
+# raw_high_theta_B = set(metadata_B[metadata_B['data_list'] >= threshold]['Unnamed: 0'])
 
-# Intersect to see how many high-theta samples we lost to the cleaning function
-lost_high_theta_A = raw_high_theta_A.intersection(dropped_samples_A)
-lost_high_theta_B = raw_high_theta_B.intersection(dropped_samples_B)
+# # # Intersect to see how many high-theta samples we lost to the cleaning function
+# # lost_high_theta_A = raw_high_theta_A.intersection(dropped_samples_A)
+# # lost_high_theta_B = raw_high_theta_B.intersection(dropped_samples_B)
 
-print(f"\n--- QC: Missed Opportunities ---")
-print(f"Disease A: Lost {len(lost_high_theta_A)} high-theta samples during cleaning.")
-print(f"Disease B: Lost {len(lost_high_theta_B)} high-theta samples during cleaning.")
-# Note: If this number is high, you may need to adjust `clean_rows` to prefer keeping 
-# the duplicate with the highest theta, rather than random/first dropping.
-# ---------------------------------------------------------
-# Extract and Print the Lost High-Theta Samples
-# ---------------------------------------------------------
+# # print(f"\n--- QC: Missed Opportunities ---")
+# # print(f"Disease A: Lost {len(lost_high_theta_A)} high-theta samples during cleaning.")
+# # print(f"Disease B: Lost {len(lost_high_theta_B)} high-theta samples during cleaning.")
+# # # Note: If this number is high, you may need to adjust `clean_rows` to prefer keeping 
+# # # the duplicate with the highest theta, rather than random/first dropping.
+# # # ---------------------------------------------------------
+# # # Extract and Print the Lost High-Theta Samples
+# # # ---------------------------------------------------------
 
-# Filter the raw metadata to only include the lost samples
-lost_details_A = metadata_A[metadata_A['Unnamed: 0'].isin(lost_high_theta_A)]
-lost_details_B = metadata_B[metadata_B['Unnamed: 0'].isin(lost_high_theta_B)]
+# # # # Filter the raw metadata to only include the lost samples
+# # # lost_details_A = metadata_A[metadata_A['Unnamed: 0'].isin(lost_high_theta_A)]
+# # # lost_details_B = metadata_B[metadata_B['Unnamed: 0'].isin(lost_high_theta_B)]
 
-# Rename columns just for a cleaner printout
-lost_details_A = lost_details_A.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
-lost_details_B = lost_details_B.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
+# # # # Rename columns just for a cleaner printout
+# # # lost_details_A = lost_details_A.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
+# # # lost_details_B = lost_details_B.rename(columns={'Unnamed: 0': 'Sample_ID', 'data_list': 'Theta'})
 
-print("\n--- Details of Lost High-Theta Samples: Disease A ---")
-if lost_details_A.empty:
-    print("No high-theta samples lost! Perfect.")
-else:
-    # Sort by Theta descending so you see the biggest losses first
-    lost_details_A = lost_details_A.sort_values(by='Theta', ascending=False)
-    print(lost_details_A[['Sample_ID', 'Theta']].to_string(index=False))
+# # # print("\n--- Details of Lost High-Theta Samples: Disease A ---")
+# # # if lost_details_A.empty:
+# # #     print("No high-theta samples lost! Perfect.")
+# # # else:
+# # #     # Sort by Theta descending so you see the biggest losses first
+# # #     lost_details_A = lost_details_A.sort_values(by='Theta', ascending=False)
+# # #     print(lost_details_A[['Sample_ID', 'Theta']].to_string(index=False))
 
-print("\n--- Details of Lost High-Theta Samples: Disease B ---")
-if lost_details_B.empty:
-    print("No high-theta samples lost! Perfect.")
-else:
-    lost_details_B = lost_details_B.sort_values(by='Theta', ascending=False)
-    print(lost_details_B[['Sample_ID', 'Theta']].to_string(index=False))
+# # # print("\n--- Details of Lost High-Theta Samples: Disease B ---")
+# # # if lost_details_B.empty:
+# # #     print("No high-theta samples lost! Perfect.")
+# # # else:
+# # #     lost_details_B = lost_details_B.sort_values(by='Theta', ascending=False)
+# # #     print(lost_details_B[['Sample_ID', 'Theta']].to_string(index=False))
 
 valid_samples_A = df_clean_cancerA.columns
 valid_samples_B = df_clean_cancerB.columns
@@ -217,7 +231,7 @@ print(f"Metadata A aligned. Remaining thetas: {len(metadata_A)}")
 print(f"Metadata B aligned. Remaining thetas: {len(metadata_B)}")
 # assert list(metadata_A['Sample_ID']) == list(df_clean_cancerA.columns), "FATAL: Disease A Metadata and Matrix are misaligned!"
 # assert list(metadata_B['Sample_ID']) == list(df_clean_cancerB.columns), "FATAL: Disease B Metadata and Matrix are misaligned!"
-raise
+
 # Creating Profiles
 # average healthy data
 blueprint_healthy = df_real_healthy.mean(axis=1).values
@@ -261,22 +275,40 @@ elif n_B > allowed_max:
 
 samples_A = high_theta_A_meta['Unnamed: 0'].values
 # Extract their mixed profiles
-mixed_A_subset = df_real_cancerA[samples_A].values
+mixed_A_subset = df_clean_cancerA[samples_A].values
 thetas_A_real = high_theta_A_meta['data_list'].values
 # Deconvolute EACH sample to get its pure disease profile
 # We use broadcasting [:, None] to align the 1D arrays with the 2D matrix
 pure_disease_A_matrix = (mixed_A_subset - (1 - thetas_A_real) * blueprint_healthy[:, None]) / thetas_A_real
 pure_disease_A_matrix = pure_disease_A_matrix.clip(min=0)
 
+# 1. Create a boolean mask of the rows that meet your criteria in the NumPy array
+mask = (pure_disease_A_matrix > num).any(axis=1)
+
+# 2. Apply that mask to the index of your original Pandas DataFrame
+actual_genes_a = df_clean_cancerA[samples_A].index[mask]
+
+# 3. Print the resulting list of gene names
+print(f"Genes over {num} in pure A after dividing theta:")
+print(actual_genes_a.tolist())
 
 samples_B = high_theta_B_meta['Unnamed: 0'].values
 thetas_B_real = high_theta_B_meta['data_list'].values
 # Deconvolute EACH sample to get its pure disease profile
 # Extract their mixed profiles
-mixed_B_subset = df_real_cancerB[samples_B].values
+mixed_B_subset = df_clean_cancerB[samples_B].values
 pure_disease_B_matrix = (mixed_B_subset - (1 - thetas_B_real) * blueprint_healthy[:, None]) / thetas_B_real
 pure_disease_B_matrix = pure_disease_B_matrix.clip(min=0)
 
+# 1. Create a boolean mask of the rows that meet your criteria in the NumPy array
+mask = (pure_disease_B_matrix > num).any(axis=1)
+
+# 2. Apply that mask to the index of your original Pandas DataFrame
+actual_genes_b = df_clean_cancerB[samples_B].index[mask]
+
+# 3. Print the resulting list of gene names
+print(f"Genes over {num} in pure B after dividing theta:")
+print(actual_genes_b.tolist())
 print("Successfully isolated pure profiles for multiple high-theta Disease A and B samples.")
 
 
@@ -361,21 +393,35 @@ df_healthy.to_csv('healthy_data.csv')
 # 3. Save Pure Disease Profiles
 df_pure_A = pd.DataFrame(disease_A_pool, index=df_real_healthy.index, 
                          columns=[f'DiseaseA-Sample{i}' for i in range(disease_A_pool.shape[1])])
+
+rows_over_num_a_pure_cv= df_pure_A.index[(df_pure_A > num).any(axis=1)]
+print(f"Genes over {num} for pure disease A after cv noise")
+print(rows_over_num_a_pure_cv.to_list())
+
 # df_pure_A.to_csv('pure_disease_A.csv')
 
 df_pure_B = pd.DataFrame(disease_B_pool, index=df_real_healthy.index, 
                          columns=[f'DiseaseB-Sample{i}' for i in range(disease_B_pool.shape[1])])
 # df_pure_B.to_csv('pure_disease_B.csv')
+rows_over_num_b_pure_cv= df_pure_B.index[(df_pure_B > num).any(axis=1)]
+print(f"Genes over {num} for pure disease B after cv noise")
+print(rows_over_num_b_pure_cv.to_list())
 
 # 4. Save Mixed Data A and its Theta values
 df_mixed_A = pd.DataFrame(final_mixed_A, index=df_real_healthy.index, 
                           columns=[f'DiseaseA-Sample{i}' for i in range(final_mixed_A.shape[1])])
 # df_mixed_A.to_csv('mixed_data_A.csv')
 # pd.Series(thetas_A, name='Theta').to_csv('mixed_A_thetas.csv', index=False)
-
+rows_over_num_a_mix_noise= df_mixed_A.index[(df_mixed_A > num).any(axis=1)]
+print(f"Genes over {num} for mix disease A after all noise")
+print(rows_over_num_a_mix_noise.to_list())
 # 5. Save Mixed Data B and its Theta values
 df_mixed_B = pd.DataFrame(final_mixed_B, index=df_real_healthy.index, 
                           columns=[f'DiseaseB-Sample{i}' for i in range(final_mixed_B.shape[1])])
+rows_over_num_b_mix_noise= df_mixed_B.index[(df_mixed_B > num).any(axis=1)]
+print(f"Genes over {num} for mix disease B after all noise")
+print(rows_over_num_b_mix_noise.to_list())
+raise
 # df_mixed_B.to_csv('mixed_data_B.csv')
 # pd.Series(thetas_B, name='Theta').to_csv('mixed_B_thetas.csv', index=False)
 

@@ -104,7 +104,7 @@ def show(title=None, xlabel=None, ylabel=None, xlim=None, ylim=None, aspect=Fals
 ### Resolving Path issue
 from pathlib import Path
 
-script_dir = Path(__file__).resolve().parent
+script_dir = Path(__file__).resolve().parent.parent
 # samples files
 # healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
 # diseaseA_path = Path('../../data/real/GeneMatrix_H3K4me3_crc.csv')
