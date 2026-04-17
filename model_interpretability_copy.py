@@ -283,6 +283,7 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, tes
                         recon_mix = recon_mix_t.detach().cpu().numpy()
                         # input_final = test_n_theta.numpy()
                     # Flatten the data for scatter
+                    input_numpy = test_n_theta.detach().cpu().numpy() # Extract numpy array first
                     flat_input = test_n_theta.detach().cpu().numpy().flatten()
                     flat_recon = recon_mix.flatten()
                     
@@ -307,6 +308,43 @@ def analyze_total_reconstruction(labels_dict, inference_cache, test_df_full, tes
                         flat_labels = np.repeat(sample_labels.values, gene_size)
                         _plot_complex_total_scatter(ax, flat_input, flat_recon, flat_labels, color_map, model_label, enc)
                         
+                        threshold = 1500
+                        mask_2d = (recon_mix > threshold)  | (input_numpy > threshold )
+                        gene_names = test_df_full.drop(columns=['theta_value', 'disease_type'], errors='ignore').columns                        
+                        genes_over_thresh = gene_names[mask_2d.any(axis=0)]
+                        
+                        if len(genes_over_thresh) > 0:
+                            print(f"\n[Model: {model_label} | Enc: {enc}]")
+                            print(f"Genes reconstructed > {threshold}: {genes_over_thresh.tolist()}. Num is {len(genes_over_thresh)}")
+                        
+                        # 2. GRAPHING: Annotate the points on the scatter plot
+                        # Find the 1D indices where the flattened reconstruction is over the threshold
+                        over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold ))[0]
+                        
+                        # Limit annotations to prevent text-overlap on extremely dense graphs
+                        max_annotations = 30
+                        
+                        for i, flat_idx in enumerate(over_thresh_indices):
+                            if i >= max_annotations:
+                                print(f"  ... and {len(over_thresh_indices) - max_annotations} more points (annotations truncated for readability).")
+                                break
+                                
+                            x_val = flat_input[flat_idx]
+                            y_val = flat_recon[flat_idx]
+                            
+                            # Map the 1D index back to the gene column index using modulo
+                            gene_col_idx = flat_idx % gene_size
+                            gene_name = gene_names[gene_col_idx]
+                            
+                            # Draw the text next to the point
+                            ax.annotate(gene_name, 
+                                        (x_val, y_val), 
+                                        xytext=(5, 5), # Offset the text slightly
+                                        textcoords='offset points',
+                                        fontsize=8, 
+                                        color='black',
+                                        alpha=0.7)
+                            
                     # Clean up grid inner labels
                     if col_idx > 0: ax.set_ylabel("")
                     if row_idx < n_rows - 1: ax.set_xlabel("")
@@ -415,6 +453,43 @@ def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache,
                         flat_labels = np.repeat(sample_labels.values, gene_size)
                         _plot_complex_scatter(ax, flat_input, flat_recon, flat_labels, color_map, model_label, enc)
                         
+                        threshold = 1500
+                        mask_2d = (recon_final > threshold)  | (benchmark_truth.values > threshold )
+                        gene_names = benchmark_truth.columns
+                        
+                        genes_over_thresh = gene_names[mask_2d.any(axis=0)]
+                        
+                        if len(genes_over_thresh) > 0:
+                            print(f"\n[Model: {model_label} | Enc: {enc}]")
+                            print(f"Genes reconstructed > {threshold}: {genes_over_thresh.tolist()}. Num is {len(genes_over_thresh)}")
+                        
+                        # 2. GRAPHING: Annotate the points on the scatter plot
+                        # Find the 1D indices where the flattened reconstruction is over the threshold
+                        over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold ))[0]
+                        
+                        # Limit annotations to prevent text-overlap on extremely dense graphs
+                        max_annotations = 30
+                        
+                        for i, flat_idx in enumerate(over_thresh_indices):
+                            if i >= max_annotations:
+                                print(f"  ... and {len(over_thresh_indices) - max_annotations} more points (annotations truncated for readability).")
+                                break
+                                
+                            x_val = flat_input[flat_idx]
+                            y_val = flat_recon[flat_idx]
+                            
+                            # Map the 1D index back to the gene column index using modulo
+                            gene_col_idx = flat_idx % gene_size
+                            gene_name = gene_names[gene_col_idx]
+                            
+                            # Draw the text next to the point
+                            ax.annotate(gene_name, 
+                                        (x_val, y_val), 
+                                        xytext=(5, 5), # Offset the text slightly
+                                        textcoords='offset points',
+                                        fontsize=8, 
+                                        color='black',
+                                        alpha=0.7)
                     # Clean up grid inner labels
                     if col_idx > 0: ax.set_ylabel("")
                     if row_idx < n_rows - 1: ax.set_xlabel("")
@@ -1162,7 +1237,37 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     # ==========================================
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
+    print("🎨 Drawing Total Mix Scatter Plots...")
+    analyze_total_reconstruction(
+        labels_dict=labels_dict, 
+        inference_cache=inference_cache, 
+        test_df_full=test_df_full, 
+        test_n_theta=test_no_theta_t,
+        gene_size=actual_gene_size, 
+        scaler=scaler,
+        scale_bool=scale_bool, 
+        save_path=save_path+"_total", 
+        mode=mode, 
+        is_simple=is_simple, 
+        is_mixed=is_mixed
+    )
+    
 
+    print("🎨 Drawing Disease Branch Scatter Plots...")
+    analyze_disease_portion_reconstruction_scatter(
+        labels_dict=labels_dict, 
+        inference_cache=inference_cache, 
+        test_df_full=test_df_full, 
+        true_disease_input=true_disease, 
+        scaler=scaler,
+        scale_bool=scale_bool, 
+        gene_size=actual_gene_size,
+        save_path=save_path+"_disease", 
+        mode=mode, 
+        is_simple=is_simple
+        ,
+        is_mixed=is_mixed
+    )
     print("🎨 Drawing disease recon mse...")
     # plot_disease_reconstruction_mse_by_theta
     plot_disease_reconstruction_mse_lines(labels_dict=labels_dict,
@@ -1200,36 +1305,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
             is_mixed=is_mixed                    
         )
     
-    print("🎨 Drawing Disease Branch Scatter Plots...")
-    analyze_disease_portion_reconstruction_scatter(
-        labels_dict=labels_dict, 
-        inference_cache=inference_cache, 
-        test_df_full=test_df_full, 
-        true_disease_input=true_disease, 
-        scaler=scaler,
-        scale_bool=scale_bool, 
-        gene_size=actual_gene_size,
-        save_path=save_path+"_disease", 
-        mode=mode, 
-        is_simple=is_simple
-        ,
-        is_mixed=is_mixed
-    )
 
-    print("🎨 Drawing Total Mix Scatter Plots...")
-    analyze_total_reconstruction(
-        labels_dict=labels_dict, 
-        inference_cache=inference_cache, 
-        test_df_full=test_df_full, 
-        test_n_theta=test_no_theta_t,
-        gene_size=actual_gene_size, 
-        scaler=scaler,
-        scale_bool=scale_bool, 
-        save_path=save_path+"_total", 
-        mode=mode, 
-        is_simple=is_simple, 
-        is_mixed=is_mixed
-    )
     
     
     
