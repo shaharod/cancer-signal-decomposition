@@ -18,7 +18,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         if is_mixed:
             df_healthy = data_utils.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
             # 2. Load Disease Data (Theta > 0)
-            df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.get_theta_path(mode_val), mode=mode_val) #cfg.DISEASE_GENES_PATH
+            df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.get_theta_path(mode_val), mode=mode_val) 
             
             # 3. Concatenate 
             df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
@@ -153,20 +153,11 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
 if __name__ == "__main__":
     for mode in ["true"]:
         print(f"\n" + "="*40)
-        print(f">>> STARTING SYNTHETIC EXPERIMENT: {mode.upper()}")
+        print(f">>> STARTING EXPERIMENT: {mode.upper()}")
         print("="*40)
         
-        # Set the flags so get_path and get_ready_tensors behave correctly
-        if mode == "true":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = False
-        elif mode == "random":
-            cfg.RANDOM_THETA_EXP = True
-            cfg.FIXED_THETA_EXP = False
-        elif mode == "fixed":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = True
+        # Set the unified string flag so config functions route correctly
+        cfg.THETA_EXP_MODE = mode
             
         run_cross_architecture_tournament(mode, is_mixed=True)
-        # run_cross_architecture_tournament(mode, is_mixed=False)
 
