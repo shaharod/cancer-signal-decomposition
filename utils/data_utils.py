@@ -311,7 +311,7 @@ def load_reconstruction_data(phase, mode):
         truth_file = cfg.HEALTHY_GENES_PATH
     else:
         mix_file =cfg.get_disease_gene_path(mode)  # Input is mixed data
-        truth_file = cfg.DATA_SUB / 'pure_disease_truth.csv' # Truth is pure disease
+        truth_file = cfg.get_data_dir() / 'pure_disease_truth.csv' # Truth is pure disease
     print(f"truth_file: {truth_file}")
     print(f"mix file: {mix_file}")
     # 2. Validation
