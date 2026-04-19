@@ -1,10 +1,5 @@
-import os
-
-import joblib
 import config as cfg
 import utils.analysis_utils as au
-from core.models.model_factory import ModelFactory
-
 import utils.plots_utils as pu
 import torch
 import numpy as np
@@ -177,22 +172,11 @@ if __name__ == '__main__':
     
     for mode in ["true"]: #, "fixed"]:
         print(f"\n" + "="*40)
-        print(f">>> STARTING SYNTHETIC EXPERIMENT: {mode.upper()}")
+        print(f">>> STARTING EXPERIMENT: {mode.upper()}")
         print("="*40)
         
-        # Set the flags so get_path and get_ready_tensors behave correctly
-        if mode == "true":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = False
-        # elif mode == "random":
-        #     cfg.RANDOM_THETA_EXP = True
-        #     cfg.FIXED_THETA_EXP = False
-        elif mode == "fixed":
-            cfg.RANDOM_THETA_EXP = False
-            cfg.FIXED_THETA_EXP = True
-    # TODO: fix logic, maybe from command lines arguments or something
-    # print(f'model type is: {'synthetic' if cfg.SYNTHETIC_DATA else 'synthetic'}\n\n')
+        cfg.THETA_EXP_MODE = mode
+        
         analyze_disease_mix(is_mixed=True) #both healthy and disease samples in training
         # analyze_disease_mix(is_mixed=False) #disease samples only
-
 

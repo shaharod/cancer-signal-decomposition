@@ -8,7 +8,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 ## --------------- EXPERIMENT CONTROLS ----------------- ##
 
 # Choose Data Source: 'real' or 'synthetic'
-DATA_SOURCE = 'synthetic'  
+DATA_SOURCE = 'real'  
 
 # Choose Complexity (Only applies if DATA_SOURCE is 'synthetic'): 'simple' or 'complex'
 SYNTHETIC_TYPE = 'complex' 
@@ -16,7 +16,7 @@ SYNTHETIC_TYPE = 'complex'
 # Choose Variant. 
 # Synthetic Options: 'dif_dp', 'dif_hp', 'theta_0.1', 'theta_0.01', 'theta_0.001', 'theta_0.005', 'theta_lim_0.7', 'theta_no_lim'
 # Real Options: 'basic', 'none'
-VARIANT = 'dif_dp' 
+VARIANT = 'basic' 
 
 # Choose Theta Mode: 'true', 'fixed', 'random'
 THETA_EXP_MODE = 'true' 
@@ -135,7 +135,7 @@ def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODEL
     else:
         path = root
 
-    os.makedirs(path, exist_ok=True)
+    path.mkdir(parents=True, exist_ok=True)
     return path
 
 def get_split_path(phase, scale_tag, is_mixed):

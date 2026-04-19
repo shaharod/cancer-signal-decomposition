@@ -803,6 +803,7 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
     for variant_name, suffix in variants_dict.items():
         # 1. Override Config Paths for this variant
         cfg.BASE_EXP_DIR = cfg.PROJECT_ROOT / 'outputs' / f"synthetic_experiments_{suffix}"
+        cfg.change_data_dir(suffix)
         cfg.DATA_SUB = cfg.DATA_PATH/ "synthetic_complex" /f"{suffix}"
         print(f"\n--- Processing Disease Branch MSE for Variant: {variant_name} ---")
         

@@ -13,7 +13,7 @@ def check_theta_integrity():
     # 2. Load Tensors using your pipeline (Experiment Mode)
     # Ensure cfg.RANDOM_THETA_EXP = True before this
     train_t, test_t, _ = data_utils.get_ready_tensors(
-        cfg.DISEASE_GENES_PATH,
+        cfg.get_disease_gene_path(mode_val="true"),
         theta_path=cfg.THETA_PATH,
         randomize_theta=True,
         use_scaling=True

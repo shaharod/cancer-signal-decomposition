@@ -1,277 +1,27 @@
+import traceback
+
+from matplotlib.lines import Line2D
+import seaborn as sns
+from scipy import stats
+from sklearn.metrics import r2_score
+import pandas as pd
 import matplotlib.pyplot as plt
 import utils.analysis_utils as au
 import config as cfg
 import numpy as np
-import os
+import utils.data_utils as du
 
 DATA_TYPE = 'Synthetic' if cfg.SYNTHETIC_DATA else 'True'
 ENC_SIZES = cfg.ENCODING_SIZES
 
+DISEASE_MAP = {0: "Healthy", 1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+COLOR_MAP = {
+    "Healthy": "#2ecc71",         # Green
+    "Disease A (CRC)": "#d43220", # Red
+    "Disease B (SCLC)": "#870fb6",# Purple
+    "Disease": "#d43220"          # Fallback Red
+}
 
-def plot_test_mse_bars(data_s, data_u, fig_title, save_path):
-    """
-    Bar plots of Test MSE
-    """
-
-    num_rows = len(ENC_SIZES)
-    fig, axes = plt.subplots(num_rows, 2, figsize=(12, 4 * num_rows), squeeze=False)
-    fig.suptitle(fig_title, fontsize=16, fontweight='bold')
-
-    col_titles = ["Pipeline: Trained on Scaled Data", "Pipeline: Trained on Raw Data"]
-    datasets = [data_s, data_u]
-
-    colors = ['#8dbade', '#558e3e', '#e1968b'] # Matching colors
-
-    for row_idx, enc in enumerate(ENC_SIZES):
-        for col_idx, data in enumerate(datasets):
-            ax = axes[row_idx, col_idx]
-            model_names = list(data.keys())
-
-            mse_vals = [data[m][au.TEST_MSE_IDX].get(enc, [0])[0] for m in model_names]
-
-            bars = ax.bar(model_names, mse_vals, color=colors[:len(model_names)], 
-                          edgecolor='black', alpha=0.9, width=0.6)
-            
-            ax.set_title(f"Encoding {enc} | {col_titles[col_idx]}", fontsize=12)
-            ax.set_ylabel("MSE (Original Units)")
-            ax.grid(axis='y', linestyle='--', alpha=0.3)
-            plt.setp(ax.get_xticklabels(), fontweight='bold', fontsize=9)
-
-            for b in bars:
-                height = b.get_height()
-                ax.text(b.get_x() + b.get_width()/2, height + (max(mse_vals) * 0.01),
-                        f'{height:.4g}', ha='center', va='bottom', fontweight='bold', fontsize=10)
-            
-            ax.set_ylim(0, max(mse_vals) * 1.15)
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(save_path / f'{fig_title}.png')
-    plt.close()
-
-
-def plot_learning_curves(data_s, data_u, fig_title_prefix, save_path, zoom_params=None):
-    """
-    Generates one figure per Model Type.
-    Rows: Encoding Sizes
-    Cols: Scaled vs Unscaled Data
-    """
-    
-    # 1. Identify unique models (excluding PCA)
-    all_models = sorted(list(set(list(data_s.keys()) + list(data_u.keys()))))
-    models_to_plot = [m for m in all_models if 'pca' not in m.lower()]
-
-    datasets = [("Scaled Data", data_s), ("Unscaled Data", data_u)]
-
-    for model_name in models_to_plot:
-        
-        num_rows = len(ENC_SIZES)
-        # Increased height slightly to accommodate headers
-        fig, axes = plt.subplots(num_rows, 2, figsize=(13, 4.5 * num_rows), squeeze=False)
-        title = ' '.join(fig_title_prefix.split('_'))
-        fig.suptitle(f"{title}: {model_name}", fontsize=18, fontweight='bold', y=0.96)
-
-        for row_idx, enc in enumerate(ENC_SIZES):
-            for col_idx, (col_name, data) in enumerate(datasets):
-                ax = axes[row_idx, col_idx]
-
-                # --- Titles & Headers ---
-                # 1. Standard Subplot Title (Encoding Size)
-                ax.set_title(f"Encoding Size: {enc}", fontsize=11, fontweight='bold')
-
-                # 2. Column Header: Manually placed significantly HIGHER (Only on top row)
-                if row_idx == 0:
-                    ax.text(0.5, 1.12, col_name, 
-                            transform=ax.transAxes, 
-                            ha='center', va='bottom', 
-                            fontsize=14, fontweight='bold') 
-
-                # --- Data Extraction ---
-                if model_name not in data:
-                    ax.text(0.5, 0.5, "Model not in dataset", ha='center', transform=ax.transAxes)
-                    continue
-
-                model_tuple = data[model_name]
-                train_h = model_tuple[au.TRAIN_LOSS_IDX].get(enc, [])
-                eval_h  = model_tuple[au.EVAL_LOSS_IDX].get(enc, [])
-
-                # --- Plotting ---
-                if len(train_h) > 0:
-                    epochs = np.arange(1, len(train_h) + 1)
-                    # Train: Blue Line
-                    ax.plot(epochs, train_h, label="Train", color='tab:blue', linewidth=1.5)
-
-                    if len(eval_h) > 0:
-                        step = len(train_h) // len(eval_h)
-                        e_epochs = np.arange(step, len(train_h) + 1, step)
-                        # Eval: Orange Dashed Line with Markers
-                        ax.plot(e_epochs, eval_h, label="Eval", color='tab:orange', 
-                                linestyle='--', marker='.', markersize=6, alpha=0.8)
-
-                # --- Zoom & formatting ---
-                if zoom_params:
-                    if 'last_n_epochs' in zoom_params and len(train_h) > 0:
-                        max_e = len(train_h)
-                        ax.set_xlim(max(1, max_e - zoom_params['last_n_epochs']), max_e)
-                    
-                    if 'ylim_top' in zoom_params and zoom_params['ylim_top'] is not None:
-                        ax.set_ylim(0, zoom_params['ylim_top'])
-
-                ax.set_ylabel("Loss (MSE)")
-                ax.set_xlabel("Epochs")
-                ax.grid(True, linestyle='--', alpha=0.3)
-                ax.legend(fontsize='small', loc='upper right')
-
-        # Adjusted rect to leave more room at the top for the manual headers
-        plt.tight_layout(rect=[0, 0.03, 1, 0.96]) 
-        
-        file_name = f"{fig_title_prefix}_{model_name}.png"
-        plt.savefig(save_path / file_name)
-        plt.close()
-        print(f"Saved plot: {file_name}")
-
-
-def plot_reconstruction_scatter(original, reconstructed, title, save_path, log_scale=False):
-    """Plot 4: Individual Gene Reconstruction with Pearson Correlation."""
-    plt.figure(figsize=(8, 8))
-    x, y = np.array(original).flatten(), np.array(reconstructed).flatten()
-    
-    # Calculate Correlation Coefficient
-    corr = np.corrcoef(x, y)[0, 1]
-    
-    plt.scatter(x, y, alpha=0.4, s=10, color='#3498db', edgecolors='none', label='Genes')
-    
-    # Identity Line
-    ma = max(x.max(), y.max())
-    plt.plot([0, ma], [0, ma], color='red', linestyle='--', linewidth=1.5, label='Identity (y=x)')
-
-    plt.title(f"{title}\nPearson Correlation: {corr:.4f}", fontsize=14, fontweight='bold')
-    plt.xlabel("Ground Truth Expression", fontweight='bold')
-    plt.ylabel("Model Reconstruction", fontweight='bold')
-    
-    if log_scale:
-        plt.xscale('log'); plt.yscale('log')
-
-    plt.grid(True, linestyle='--', alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(save_path) # Analyzer provides the full filename here
-    plt.close()
-
-
-def plot_mse_vs_encoding(data_s, data_u, fig_title, save_path):
-    """
-    Test MSE loss change over encoding sizes
-    """
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 6), sharey=False)
-    fig.suptitle(fig_title, fontsize=16, fontweight='bold')
-    col_titles = ["Pipeline: Scaled Data", "Pipeline: Raw Data"]
-    datasets = [data_s, data_u]
-    markers = ['o', 's', 'D', '^', 'v']
-
-    for col_idx, data in enumerate(datasets):
-        ax = axes[col_idx]
-        for m_idx, (model_name, model_tuple) in enumerate(data.items()):
-            mse_dict = model_tuple[2]
-            y_vals = [float(np.array(mse_dict.get(enc, 0)).flatten()[0]) for enc in ENC_SIZES]
-            ax.plot(ENC_SIZES, y_vals, marker=markers[m_idx % len(markers)], label=model_name, linewidth=2)
-            
-            # Annotate exact values
-            for x_val, y_val in zip(ENC_SIZES, y_vals):
-                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
-                            xytext=(0,10), ha='center', fontsize=8, fontweight='bold')
-
-        ax.set_title(col_titles[col_idx]); ax.set_xticks(ENC_SIZES)
-        ax.set_ylabel("Final Test MSE"); ax.grid(True, alpha=0.4)
-        ax.set_xlabel("Encoding Size"); ax.grid(True, alpha=0.4)
-        ax.legend()
-        ax.set_ylim(ax.get_ylim()[0], ax.get_ylim()[1] * 1.2) # Headroom
-
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig(save_path / f'{fig_title}.png')
-    plt.close()
-
-
-def plot_training_vs_pca(data_s, data_u, fig_title_prefix, save_path):
-    """
-    Plots Training Loss vs PCA Baseline.
-    One figure per Model Type.
-    Rows: Encoding Sizes
-    Cols: Scaled vs Unscaled Data
-    """
-    
-    # 1. Separate PCA models from AE models
-    all_keys = sorted(list(set(list(data_s.keys()) + list(data_u.keys()))))
-    pca_keys = [k for k in all_keys if 'pca' in k.lower()]
-    ae_models = [k for k in all_keys if 'pca' not in k.lower()]
-
-    datasets = [("Scaled Data", data_s), ("Unscaled Data", data_u)]
-
-    for model_name in ae_models:
-        
-        num_rows = len(ENC_SIZES)
-        fig, axes = plt.subplots(num_rows, 2, figsize=(12, 3.5 * num_rows), squeeze=False)
-        fig.suptitle(f"{fig_title_prefix}: {model_name} vs PCA", fontsize=18, fontweight='bold', y=0.98)
-
-        for row_idx, enc in enumerate(ENC_SIZES):
-            for col_idx, (col_name, data) in enumerate(datasets):
-                ax = axes[row_idx, col_idx]
-
-                # --- Headers & Titles ---
-                ax.set_title(f"Encoding: {enc}", fontsize=11, fontweight='bold')
-                
-                if row_idx == 0:
-                    ax.text(0.5, 1.08, col_name, 
-                            transform=ax.transAxes, 
-                            ha='center', va='bottom', 
-                            fontsize=14, fontweight='bold') 
-
-                # --- Get PCA Baseline for this specific data/encoding ---
-                pca_val = None
-                # Find the corresponding PCA model in this dataset
-                current_pca_key = next((k for k in data.keys() if 'pca' in k.lower()), None)
-                
-                if current_pca_key:
-                    # Usually PCA is constant, so we take the first value or min value of its "history"
-                    pca_hist = data[current_pca_key][au.TRAIN_LOSS_IDX].get(enc, [])
-                    if pca_hist:
-                        pca_val = pca_hist[-1] # Taking the final converged value
-
-                # --- Get AE Model Data ---
-                if model_name in data:
-                    train_h = data[model_name][au.TRAIN_LOSS_IDX].get(enc, [])
-                    
-                    if len(train_h) > 0:
-                        epochs = np.arange(1, len(train_h) + 1)
-                        # Main Model Line
-                        ax.plot(epochs, train_h, label=f"{model_name} (Train)", 
-                                color='tab:blue', linewidth=2)
-                        
-                        # PCA Baseline Line
-                        if pca_val is not None:
-                            ax.axhline(y=pca_val, color='tab:green', linestyle='--', 
-                                       linewidth=2, label=f"PCA Baseline ({pca_val:.2f})")
-
-                # --- Formatting ---
-                ax.set_ylabel("Training Loss (MSE)")
-                ax.set_xlabel("Epochs")
-                ax.grid(True, linestyle=':', alpha=0.6)
-                ax.legend(fontsize='small', loc='upper right')
-
-        # Tight layout logic matches your preference
-        plt.tight_layout(rect=[0, 0.03, 1, 0.93])
-        
-        file_name = f"{fig_title_prefix}_{model_name}_vs_PCA.png"
-        plt.savefig(save_path / file_name)
-        plt.close()
-        print(f"Saved plot: {file_name}")
-
-
-
-
-                    #### Sarina Plots Fixing Logic - Try ####
-
-## Sarina plot addition ##
 style_map = {
         'basic': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
         'Basic-AE': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
@@ -281,97 +31,6 @@ style_map = {
         'PCA': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'}
     }
 # -- CURVE PLOTS -- #
-def compare_models_side_by_side_grid(losses_ae_basic_s, losses_ae_layered_s, losses_pca_s, 
-                                     losses_ae_basic_u, losses_ae_layered_u, losses_pca_u,
-                                     encoding_sizes, 
-                                     save_path, folder_path, runtag, ylim_top, zoom_x=50,
-                                     name1="Basic AE", name2="Layered AE"):
-    """
-    Plots a 2x2 grid: comparing loss curves for basic and layered compared to the pca
-    Rows: Scaled Data, Unscaled Data
-    Cols: Basic AE vs PCA, Layered AE vs PCA
-    """
-    if not encoding_sizes:
-        raise ValueError("encoding_sizes is empty.")
-
-    # 1. Setup the Grid (2 rows, 2 columns)
-    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharey='row', sharex='col')
-    
-    # Data mapping for the loop
-    # Row 0: Scaled, Row 1: Unscaled
-    row_data = [
-        {"ae_dicts": [losses_ae_basic_s, losses_ae_layered_s], "pca_dict": losses_pca_s, "label": "Scaled"},
-        {"ae_dicts": [losses_ae_basic_u, losses_ae_layered_u], "pca_dict": losses_pca_u, "label": "Unscaled"}
-    ]
-    model_names = [name1, name2]
-
-    # Calculate global max epochs for x-axis scaling
-    all_dicts = [losses_ae_basic_s, losses_ae_layered_s, losses_ae_basic_u, losses_ae_layered_u]
-    max_epochs_global = 1
-    for d in all_dicts:
-        for enc in encoding_sizes:
-            curve = d.get(enc, [])
-            if curve:
-                max_epochs_global = max(max_epochs_global, len(curve))
-
-    # 2. Iterate through Rows (Scaling) and Cols (Architecture)
-    for row_idx, r_info in enumerate(row_data):
-        for col_idx, (ae_dict, m_name) in enumerate(zip(r_info["ae_dicts"], model_names)):
-            ax = axes[row_idx, col_idx]
-            pca_dict = r_info["pca_dict"]
-            
-            for enc in encoding_sizes:
-                ae_curve = ae_dict.get(enc, [])
-                pca_val = pca_dict.get(enc, None)
-                
-                # Plot AE Curve (Solid)
-                if ae_curve:
-                    epochs = np.arange(1, len(ae_curve) + 1)
-                    line, = ax.plot(epochs, ae_curve, linewidth=1.8, label=f"Enc {enc}")
-                    line_color = line.get_color()
-
-                    # Plot PCA Line (Dashed) - Match color to corresponding AE encoding
-                    if pca_val is not None:
-                        ax.hlines(pca_val, xmin=1, xmax=len(ae_curve), linestyles="--", 
-                                  linewidth=1.4, color=line_color, alpha=0.7)
-
-            # --- Styling ---
-            if row_idx == 0:
-                ax.set_title(f"{m_name} ({r_info['label']})", fontsize=14, fontweight='bold')
-            else:
-                ax.set_title(f"{m_name} ({r_info['label']})", fontsize=14)
-                
-            ax.set_xlabel("Epoch")
-            ax.grid(True, linestyle="--", alpha=0.5)
-            
-            # Zoom Logic
-            start_epoch = max(1, max_epochs_global - zoom_x + 1)
-            ax.set_xlim(start_epoch, max_epochs_global)
-            ax.set_ylim(bottom=0, top=ylim_top)
-            
-            if col_idx == 0:
-                ax.set_ylabel(f"{r_info['label']} MSE Loss", fontweight='bold')
-
-    # 3. Handle Legend
-    # Since colors are consistent by encoding size, we only need one legend
-    handles, labels = axes[0, 0].get_legend_handles_labels()
-    # Add dummy entries for the line styles
-    from matplotlib.lines import Line2D
-    custom_lines = [Line2D([0], [0], color='gray', lw=1.8, linestyle='-'),
-                    Line2D([0], [0], color='gray', lw=1.4, linestyle='--')]
-    
-    fig.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.0, 0.95), title="Encoding Sizes")
-    fig.legend(custom_lines, ["AE Model", "PCA Baseline"], loc="upper left", bbox_to_anchor=(1.0, 0.75), title="Line Style")
-
-    plt.tight_layout(rect=[0, 0, 0.88, 0.95])
-    
-    # Save logic
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path)
-    full_path = os.path.join(folder_path, f"{save_path}_{runtag}.png")
-    plt.savefig(full_path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
 
 def plot_train_eval_curves(data_s, data_u, save_name, folder_path, 
                                  include_pca=False, zoom_params=None):
@@ -379,12 +38,6 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
     Plots Train vs Eval for all models.
     zoom_params: dict with {'last_n_epochs': int, 'ylim_top': float} or None
     """
-    # color_map = {
-    #     'basic': '#1f77b4',    # Blue
-    #     'layered': '#2ca02c',  # Green
-    #     'pca': '#EC7063',
-    #     'default': '#7f7f7f'   # Gray fallback
-    # }
     # Get encoding sizes from the first available model
     first_model = next(iter(data_u.values()))
     encoding_sizes = list(first_model[0].keys())
@@ -462,9 +115,11 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
         plt.tight_layout()
         zoom_str = "_zoomed" if zoom_params else ""
         # Save file
-        os.makedirs(folder_path, exist_ok=True)
+        folder_path.mkdir(parents=True, exist_ok=True)
         filename = f"{save_name}_{model_key}{zoom_str}.png"
-        plt.savefig(os.path.join(folder_path, filename), bbox_inches='tight', dpi=150)
+        
+        # Because folder_path is a Path object, we can just use the / operator!
+        plt.savefig(folder_path / filename, bbox_inches='tight', dpi=150)
         plt.close()
 
 def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_path, folder_path):
@@ -476,16 +131,6 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
     """
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=False)
     
-    # # We map specific labels to specific styles to keep the plot clean
-    # style_map = {
-    #     'basic': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
-    #     'Basic-AE': {'color': '#1f77b4', 'marker': 'o', 'label': 'Basic AE'},
-    #     'layered': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
-    #     'Layered-AE': {'color': '#2ca02c', 'marker': 's', 'label': 'Layered AE'},
-    #     'pca-based': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'},
-    #     'PCA': {'color': '#EC7063', 'marker': '^', 'label': 'PCA Baseline'}
-    # }
-
     pipelines = [
         (ax1, data_s, "Pipeline: Trained on Scaled Data"),
         (ax2, data_u, "Pipeline: Trained on Raw Data")
@@ -542,24 +187,14 @@ def plot_test_mse_comparison_lines(data_s, data_u, encoding_sizes, title, save_p
     fig.suptitle(title, fontsize=18, y=1.05)
     plt.tight_layout()
     
-    os.makedirs(folder_path, exist_ok=True)
-    output_path = os.path.join(folder_path, save_path)
-    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    folder_path.mkdir(parents=True, exist_ok=True)
+    plt.savefig(folder_path / save_path, bbox_inches="tight", dpi=150)
     plt.close()
-
 
 def plot_comprehensive_comparison_bars(data_s, data_u, encoding_sizes, title, save_path, folder_path):
     n_enc = len(encoding_sizes)
     fig, axes = plt.subplots(n_enc, 2, figsize=(14, 4 * n_enc), squeeze=False)
     
-    # # Standard project colors
-    # style_map = {
-    #     'basic': {'color': '#5DADE2', 'label': 'Basic AE'},
-    #     'layered': {'color': 'green', 'label': 'Layered AE'},
-    #     'pca-based': {'color': '#EC7063', 'label': 'PCA'},
-    #     'PCA': {'color': '#EC7063', 'label': 'PCA'}
-    # }
-
     model_keys = list(data_s.keys())
     x = np.arange(len(model_keys))
     bar_labels = [style_map.get(k, {'label': k})['label'] for k in model_keys]
@@ -596,48 +231,400 @@ def plot_comprehensive_comparison_bars(data_s, data_u, encoding_sizes, title, sa
 
     fig.suptitle(title, fontsize=18, y=1.02)
     plt.tight_layout()
-    os.makedirs(folder_path, exist_ok=True)
-    plt.savefig(os.path.join(folder_path, save_path), bbox_inches="tight", dpi=150)
+    folder_path.mkdir(parents=True, exist_ok=True)
+    plt.savefig(folder_path / save_path, bbox_inches="tight", dpi=150)
     plt.close()
 
-def plot_io_scatter(original, reconstructed, title, save_path, log_scale=False):
+
+# ---------- Used in model interpretability, refactoring ------ #
+def plot_disease_mse_lines(master_results, encoding_sizes, save_path, mode, is_mixed=False):
     """
-    Optimized Reconstruction Scatter. 
-    Uses hexbin for high-density genomic data to avoid memory crashes.
+    Plots the pre-calculated Test MSE vs. Encoding Size lines.
     """
-    # 1. Ensure data is on CPU and flattened
-    x = np.array(original).flatten()
-    y = np.array(reconstructed).flatten()
+    n_subplots = len(master_results)
+    if n_subplots == 0:
+        print("No MSE data to plot.")
+        return
+        
+    fig, axes = plt.subplots(1, n_subplots, figsize=(7.5 * n_subplots, 6), sharey=False)
+    if n_subplots == 1: axes = [axes]
     
-    # 2. Handle Log Scale Safely (log1p)
-    if log_scale:
-        x = np.log1p(x)
-        y = np.log1p(y)
-        label_suffix = " (Log1p)"
-    else:
-        label_suffix = ""
-
-    # 3. Calculate Correlation
-    corr = np.corrcoef(x, y)[0, 1]
-
-    plt.figure(figsize=(9, 8))
+    # Standard styles (matching your other line plots)
+    style_map = {
+        'basic': {'color': '#1f77b4', 'marker': 'o'},
+        'layered': {'color': '#2ca02c', 'marker': 's'},
+        'pca-based': {'color': '#EC7063', 'marker': '^'},
+        'PCA': {'color': '#EC7063', 'marker': '^'}
+    }
+    fallback_colors = ['#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
     
-    # Use hexbin for high density - it's much faster than scatter for millions of points
-    hb = plt.hexbin(x, y, gridsize=100, cmap='Blues', mincnt=1, bins='log')
-    cb = plt.colorbar(hb, label='log10(count)')
+    for ax, (base_name, models_dict) in zip(axes, master_results.items()):
+        color_idx = 0
+        
+        for model_label, enc_dict in models_dict.items():
+            if not enc_dict: continue
+            
+            valid_encodings = sorted(list(enc_dict.keys()))
+            y_values = [enc_dict[enc] for enc in valid_encodings]
+            
+            match_key = next((k for k in style_map.keys() if k.lower() in model_label.lower()), None)
+            style = style_map[match_key] if match_key else {'color': fallback_colors[color_idx % len(fallback_colors)], 'marker': 'd'}
+            if not match_key: color_idx += 1
+            
+            ax.plot(valid_encodings, y_values, label=model_label, color=style['color'], 
+                    marker=style['marker'], linewidth=2, markersize=8)
 
-    # Identity Line
-    max_val = max(x.max(), y.max())
-    plt.plot([0, max_val], [0, max_val], color='red', linestyle='--', linewidth=2, label='Identity (y=x)')
+            for x_val, y_val in zip(valid_encodings, y_values):
+                ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
+                            xytext=(0,10), ha='center', fontsize=9, fontweight='bold')
 
-    plt.title(f"{title}\nPearson Correlation: {corr:.4f}", fontsize=14, fontweight='bold')
-    plt.xlabel(f"Ground Truth Expression{label_suffix}", fontweight='bold')
-    plt.ylabel(f"Model Reconstruction{label_suffix}", fontweight='bold')
-    
-    plt.legend(loc='upper left')
-    plt.grid(True, linestyle=':', alpha=0.6)
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(encoding_sizes)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        ax.legend()
+        
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    fig.suptitle(f"Disease Branch Reconstruction: Test MSE vs Encoding Size (Theta: {mode})", fontsize=18, y=1.05)
     plt.tight_layout()
     
-    plt.savefig(save_path, dpi=150)
-    plt.close()
+    # 100% Pathlib Saving
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    out_folder.mkdir(parents=True, exist_ok=True)
     
+    output_path = out_folder / f"{save_path}_disease_mse_lines.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Test MSE Line Plot to {output_path}")
+
+def plot_disease_mse_by_theta_lines(master_results, bin_counts, encoding_sizes, save_path, is_mixed=False):
+    """
+    Plots the pre-calculated binned Test MSE vs. Encoding Size lines.
+    """
+    n_subplots = len(master_results)
+    if n_subplots == 0:
+        print("No binned MSE data to plot.")
+        return
+        
+    fig, axes = plt.subplots(1, n_subplots, figsize=(9 * n_subplots, 7), sharey=False)
+    if n_subplots == 1: axes = [axes]
+    
+    color_map = {'basic': '#1f77b4', 'layered': '#2ca02c', 'pca': '#EC7063'}
+    style_map = {'Low (<0.33)': 'dotted', 'Med (0.33-0.66)': 'dashed', 'High (>0.66)': 'solid'}
+    
+    for ax, (base_name, models_dict) in zip(axes, master_results.items()):
+        for model_label, bin_dict in models_dict.items():
+            m_color = next((v for k, v in color_map.items() if k in model_label.lower()), 'gray')
+            
+            for bin_name, enc_dict in bin_dict.items():
+                if not enc_dict: continue
+                
+                valid_encodings = sorted(list(enc_dict.keys()))
+                y_values = [enc_dict[enc] for enc in valid_encodings]
+                
+                l_style = style_map.get(bin_name, 'solid')
+                n_samples = bin_counts[bin_name]
+                label_text = f"{model_label} [{bin_name} | N={n_samples}]"
+                
+                ax.plot(valid_encodings, y_values, label=label_text, color=m_color, 
+                        linestyle=l_style, marker='o', linewidth=2, markersize=6)
+
+                # Data Labels
+                for x_val, y_val in zip(valid_encodings, y_values):
+                    ax.annotate(f'{y_val:.0f}', (x_val, y_val), textcoords="offset points", 
+                                xytext=(0,10), ha='center', fontsize=8)
+
+        ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
+        ax.set_xlabel("Encoding Size (Latent Dimension)", fontsize=12)
+        ax.set_ylabel("Test MSE (Original Units)", fontsize=12)
+        ax.set_xticks(encoding_sizes)
+        ax.grid(True, linestyle='--', alpha=0.5)
+        
+        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=9)
+        curr_ylim = ax.get_ylim()
+        ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
+
+    fig.suptitle("Disease MSE by Theta Bins vs Encoding Size", fontsize=18, y=1.05)
+    plt.tight_layout()
+    
+    # 100% Pathlib Saving
+    out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
+    out_folder.mkdir(parents=True, exist_ok=True)
+    
+    output_path = out_folder / f"{save_path}_disease_mse_by_theta.png"
+    plt.savefig(output_path, bbox_inches="tight", dpi=150)
+    plt.close(fig)
+    print(f"Saved Theta Binned Test MSE Line Plot to {output_path}")
+
+def _plot_simple_boxplot(ax, test_truth_disease, test_truth_healthy, recon_h, recon_d, thetas, model_label, enc):
+    """Handles the detailed 4-category synthetic data boxplots for mixed datasets."""
+    num_samples = len(thetas)
+    sample_is_disease = (thetas > 0).values
+    
+    # 1. Build the dynamic benchmark truth
+    benchmark_truth = np.zeros_like(test_truth_healthy)
+    for i in range(num_samples):
+        if sample_is_disease[i]:
+            benchmark_truth[i] = test_truth_disease[i] # Target: Pure Cancer
+        else:
+            benchmark_truth[i] = test_truth_healthy[i] # Target: Pure Healthy
+            
+    # 2. Flatten everything
+    flat_benchmark_truth = benchmark_truth.flatten()
+    flat_h_recon = recon_h.detach().cpu().numpy().flatten()
+    flat_d_recon = recon_d.detach().cpu().numpy().flatten()
+    
+    # 3. Build the 4-category labels
+    sample_labels = np.where(sample_is_disease, "Disease Sample", "Healthy Sample")
+    gene_template = np.array(['Healthy Genes (0-499)'] * 500 + ['Disease Genes (500-999)'] * 500)
+    
+    flat_gene_labels = np.tile(gene_template, num_samples)
+    flat_sample_labels = np.repeat(sample_labels, 1000)
+    flat_combined_labels = [f"{s}\n{g}" for s, g in zip(flat_sample_labels, flat_gene_labels)]
+    
+    # 4. Build the DataFrame
+    plot_df = pd.DataFrame({
+        'Expression': np.concatenate([flat_benchmark_truth, flat_h_recon, flat_d_recon]),
+        'Source': (['Benchmark Truth'] * len(flat_benchmark_truth) + 
+                   ['Healthy Branch (Frozen)'] * len(flat_h_recon) + 
+                   ['Disease Branch (Trainable)'] * len(flat_d_recon)),
+        'Module Group': np.tile(flat_combined_labels, 3)
+    })
+    
+    plot_order = [
+        "Healthy Sample\nHealthy Genes (0-499)", 
+        "Healthy Sample\nDisease Genes (500-999)",
+        "Disease Sample\nHealthy Genes (0-499)", 
+        "Disease Sample\nDisease Genes (500-999)"
+    ]
+    
+    selection_map = {
+        "Healthy Sample\nHealthy Genes (0-499)": ['Benchmark Truth', 'Healthy Branch (Frozen)'],
+        "Healthy Sample\nDisease Genes (500-999)": ['Benchmark Truth', 'Healthy Branch (Frozen)'],
+        "Disease Sample\nHealthy Genes (0-499)": ['Benchmark Truth', 'Disease Branch (Trainable)'],
+        "Disease Sample\nDisease Genes (500-999)": ['Benchmark Truth', 'Disease Branch (Trainable)']
+    }
+
+    # Filter out the combinations we don't want to plot
+    plot_df = plot_df[plot_df.apply(lambda row: row['Source'] in selection_map.get(row['Module Group'], []), axis=1)]
+    
+    # 5. Plot
+    sns.boxplot(
+        data=plot_df, x='Module Group', y='Expression', hue='Source', ax=ax, 
+        palette=['#95a5a6', '#2ecc71', '#3498db'], showfliers=False, order=plot_order
+    )
+    
+    # 6. Formatting
+    ax.tick_params(axis='x', labelsize=7)
+    plt.setp(ax.get_xticklabels(), rotation=15, ha="center", rotation_mode="anchor")
+    ax.legend(fontsize='x-small', title_fontsize='8', loc='upper right')
+    
+    ax.axhline(0, color="#f97a7a", linestyle='--', alpha=0.3)
+    ax.axhline(100, color="#85f492", linestyle='--', alpha=0.3)
+    ax.set_ylim(-10, 150)
+    
+    ax.set_title(model_label, fontweight='bold')
+    ax.set_ylabel(f"Enc: {enc}\nExpression")
+    
+def _plot_simple_total_scatter(ax, flat_input, flat_recon, model_label, enc):
+    """Handles the basic single-color scatter for simple synthetic data."""
+    ax.scatter(flat_input, flat_recon, s=1, alpha=0.1, color="#d20d0d", edgecolor='none')
+    
+    max_val = max(np.nanmax(flat_input), np.nanmax(flat_recon))
+    min_val = min(np.nanmin(flat_input), np.nanmin(flat_recon))
+    ax.plot([min_val, max_val], [min_val, max_val], color='#e74c3c', linestyle='--', linewidth=1)
+    
+    r2 = r2_score(flat_input, flat_recon)
+    pearson_r, _ = stats.pearsonr(flat_input, flat_recon)
+    text_str = f'$R^2 = {r2:.3f}$\n$r = {pearson_r:.3f}$'
+    ax.text(0.05, 0.95, text_str, transform=ax.transAxes, 
+            fontsize=12, verticalalignment='top', 
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+    ax.set_title(f"{model_label} (Enc {enc})")
+    ax.set_xlabel("Total Mixed Input")
+    ax.set_ylabel("Total Mixed Recon")
+
+def _plot_evaluation_scatter(ax, flat_input, flat_recon, flat_labels, color_map, title, xlabel, ylabel, line_color="#34495e"):
+    """A universal scatter plot generator for model evaluation."""
+    sns.scatterplot(
+        x=flat_input, y=flat_recon, hue=flat_labels, 
+        palette=color_map, s=1, alpha=0.3, ax=ax, 
+        edgecolor='none', legend=False 
+    )
+    
+    # Identity Line
+    max_val = max(np.nanmax(flat_input), np.nanmax(flat_recon))
+    min_val = min(np.nanmin(flat_input), np.nanmin(flat_recon))
+    ax.plot([min_val, max_val], [min_val, max_val], color=line_color, linestyle='--', linewidth=1)
+    
+    # Metrics
+    r2 = r2_score(flat_input, flat_recon)
+    pearson_r, _ = stats.pearsonr(flat_input, flat_recon)
+    text_str = f'$R^2 = {r2:.3f}$\n$r = {pearson_r:.3f}$'
+    ax.text(0.05, 0.95, text_str, transform=ax.transAxes, 
+            fontsize=12, verticalalignment='top', 
+            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title, fontweight='bold')
+
+def _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, threshold=1500, max_annotations=30):
+    """Finds and annotates highly expressed genes on the scatter plots."""
+    over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold))[0]
+    
+    # Quick exit if nothing is over the threshold
+    if len(over_thresh_indices) == 0:
+        return
+
+    # Print to console
+    unique_genes = set(gene_names[idx % gene_size] for idx in over_thresh_indices)
+    print(f"Genes reconstructed > {threshold}: {list(unique_genes)}. Num is {len(unique_genes)}")
+
+    # Annotate plot
+    for i, flat_idx in enumerate(over_thresh_indices):
+        if i >= max_annotations:
+            print(f"  ... and {len(over_thresh_indices) - max_annotations} more points truncated.")
+            break
+            
+        x_val = flat_input[flat_idx]
+        y_val = flat_recon[flat_idx]
+        gene_name = gene_names[flat_idx % gene_size]
+        
+        ax.annotate(gene_name, (x_val, y_val), 
+                    xytext=(5, 5), textcoords='offset points',
+                    fontsize=8, color='black', alpha=0.7)
+        
+def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_theta, 
+                             true_disease_input, gene_size, scaler, scale_bool, 
+                             save_path, mode, is_simple=False, is_mixed=False, target_type='total'):
+    """
+    Master function to plot either Total Mix Reconstruction OR Disease Signal Isolation.
+    target_type: 'total' or 'disease'
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    
+    # Pre-load healthy baseline if we are doing disease isolation
+    if target_type == 'disease':
+        _, true_healthy = du.load_reconstruction_data('healthy', mode)
+
+    for base_name, models in labels_dict.items():
+        n_rows = len(cfg.ENCODING_SIZES)
+        n_cols = len(models)
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6 * n_rows), squeeze=False)
+        
+        # Dynamic Titles
+        if target_type == 'total':
+            fig.suptitle(f"Total Mix Reconstruction (Phase: DISEASE MIX | Base: {base_name.upper()})\nTotal Input vs. Total Recon (theta: {mode})", fontsize=18, fontweight='bold', y=0.98)
+        else:
+            plot_type = "Boxplot" if is_simple else "Scatter"
+            fig.suptitle(f"Disease Signal Isolation ({plot_type} | Base: {base_name.upper()})\nTrue Pure Disease vs. Disease Branch Output (theta: {mode})", fontsize=18, fontweight='bold', y=0.98)
+                     
+        for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
+            for col_idx, (model_label, folder_tag) in enumerate(models.items()):
+                ax = axes[row_idx, col_idx]
+                try:
+                    # 1. Cache Lookup
+                    model_outputs = inference_cache[base_name][enc].get(model_label)
+                    
+                    target_key = 'mix' if target_type == 'total' else 'disease'
+                    if model_outputs is None or model_outputs[target_key] is None:
+                        ax.text(0.5, 0.5, "Model / Output Not Found", ha='center', color='red')
+                        continue
+                        
+                    recon_tensor = model_outputs[target_key]
+                    
+                    # 2. Extract Ground Truth based on target type
+                    if target_type == 'total':
+                        truth_array = test_n_theta.detach().cpu().numpy()
+                    else:
+                        test_truth_d = true_disease_input.reindex(test_df_full.index)
+                        test_truth_h = true_healthy.reindex(test_df_full.index)
+                        benchmark_truth = test_truth_d.fillna(test_truth_h)
+                        truth_array = benchmark_truth.values
+
+                    # 3. Handle Scaling
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_tensor).detach().cpu().numpy()
+                    else:
+                        recon_final = recon_tensor.detach().cpu().numpy()
+
+                    flat_input = truth_array.flatten()
+                    flat_recon = recon_final.flatten()
+                    
+                    # 4. Route to the correct helper plot
+                    if target_type == 'disease' and is_simple:
+                        _plot_simple_boxplot(
+                            ax=ax, 
+                            test_truth_disease=test_truth_d, 
+                            test_truth_healthy=true_healthy.reindex(test_df_full.index).values, 
+                            recon_h=model_outputs['healthy'], 
+                            recon_d=recon_tensor, 
+                            thetas=test_df_full['theta_value'], 
+                            model_label=model_label, 
+                            enc=enc
+                        )
+                    else:
+                        # Prepare Labels and Colors
+                        if 'disease_type' in test_df_full.columns:
+                            sample_labels = test_df_full['disease_type'].map(DISEASE_MAP).fillna("Unknown")
+                        else:
+                            lbl = "Healthy" if target_type == 'total' else "Disease"
+                            lbl_alt = "Disease"
+                            if target_type == 'total':
+                                sample_labels = np.where(test_df_full['theta_value'] == 0, lbl, lbl_alt)
+                            else:
+                                sample_labels = pd.Series([lbl_alt] * len(test_df_full))
+                            sample_labels = pd.Series(sample_labels)
+                            
+                        flat_labels = np.repeat(sample_labels.values, gene_size)
+                        
+                        if is_simple and target_type == 'total':
+                            _plot_simple_total_scatter(ax, flat_input, flat_recon, model_label, enc)
+                        else:
+                            # Use the unified evaluation scatter function you created!
+                            title = f"{model_label} (Enc {enc})"
+                            xlabel = "Total Mixed Input" if target_type == 'total' else "True Pure Disease"
+                            ylabel = "Total Mixed Recon" if target_type == 'total' else "Disease Branch Recon"
+                            line_color = "#34495e" if target_type == 'total' else "#9a1b0c"
+                            
+                            _plot_evaluation_scatter(ax, flat_input, flat_recon, flat_labels, COLOR_MAP, title, xlabel, ylabel, line_color)
+                        
+                        # 5. Annotations
+                        gene_names = test_df_full.drop(columns=['theta_value', 'disease_type'], errors='ignore').columns
+                        dynamic_thresh = np.percentile(flat_input, 99)
+                        _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, dynamic_thresh)
+
+                    # Clean up grid inner labels
+                    if col_idx > 0: ax.set_ylabel("")
+                    if row_idx < n_rows - 1: ax.set_xlabel("")
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    ax.text(0.5, 0.5, "Plotting Error", ha='center', color='red')
+
+        # Add the Universal Master Legend
+        if not is_simple or (not is_simple and target_type == 'disease'):
+            unique_classes = pd.unique(sample_labels) if 'sample_labels' in locals() else []
+            legend_elements = []
+            for cls in unique_classes:
+                color = COLOR_MAP.get(cls, "#7f8c8d")
+                legend_elements.append(Line2D([0], [0], marker='o', color='w', label=cls, markerfacecolor=color, markersize=8))
+            
+            line_lbl = 'Perfect Reconstruction'
+            legend_elements.append(Line2D([0], [0], color='#34495e' if target_type=='total' else '#2D2A2A', linestyle='--', linewidth=1, label=line_lbl))
+            fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98), fontsize=10)
+
+        # Save Figure
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}"
+        out_folder.mkdir(parents=True, exist_ok=True)
+
+        data_tag = "simple" if is_simple else "complex"
+        plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
+        plt.close(fig)
