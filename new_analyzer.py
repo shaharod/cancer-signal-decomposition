@@ -80,7 +80,6 @@ def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
                     
     return cache
 
-
 # def plot_disease_variant_multi_model_grid(master_variant_data, enc_sizes, save_dir, baseline_name):
 #     """
 #     Plots Disease Branch Test MSE vs Data Variant.

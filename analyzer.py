@@ -132,9 +132,6 @@ def analyze_disease_mix(is_mixed, phase='disease'):
         )
      
 
-
-
-
 def analyze_healthy_model(phase='healthy'):
 
     # setting labels
