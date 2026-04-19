@@ -78,7 +78,7 @@ EPOCH_JUMP     = 5
 def choose_enc_layers():
     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYNTHETIC_TYPE == 'complex'):
         # return [16, 32, 64, 128], 512, 128
-        return [2], 512, 64 #, 4, 8, 16
+        return [2, 4, 8, 16], 512, 64 #, 4, 8, 16
     else:
         return [8, 16], 32, 16
 

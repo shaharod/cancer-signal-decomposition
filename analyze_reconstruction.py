@@ -185,18 +185,17 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     if gene_size != gene_size:
         raise ValueError(f"why arent they the same size?: {gene_size} vs {actual_gene_size}")
     
+    ## removing metadatacols also from true disease?
+    true_disease = true_disease.drop(columns=metadata_cols, errors="ignore")
     # ==========================================
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
-    print("🎨 Drawing Total Mix Scatter Plots...")
-    pu.plot_reconstruction_grid(
-        labels_dict=labels_dict, inference_cache=inference_cache, 
-        test_df_full=test_df_full, test_n_theta=test_no_theta_t,
-        true_disease_input=true_disease, gene_size=actual_gene_size, 
-        scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_total", 
-        mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='total'
-    )
-
+    # pu.analyze_disease_portion_reconstruction_scatter(
+    #     labels_dict=labels_dict, inference_cache=inference_cache,
+    #     test_df_full=test_df_full, true_disease_input=true_disease, 
+    #     scaler=scaler, scale_bool=scale_bool, gene_size=gene_size,
+    #     save_path="", is_mixed=is_mixed, mode=mode
+    # )
     print("🎨 Drawing Disease Branch Scatter Plots...")
     pu.plot_reconstruction_grid(
         labels_dict=labels_dict, inference_cache=inference_cache, 
@@ -206,6 +205,15 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='disease'
     )
     
+    print("🎨 Drawing Total Mix Scatter Plots...")
+    pu.plot_reconstruction_grid(
+        labels_dict=labels_dict, inference_cache=inference_cache, 
+        test_df_full=test_df_full, test_n_theta=test_no_theta_t,
+        true_disease_input=true_disease, gene_size=actual_gene_size, 
+        scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_total", 
+        mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='total'
+    )
+
     print("🎨 Drawing Disease Recon MSE Lines...")
     analyze_disease_reconstruction_mse_lines( 
         labels_dict=labels_dict, inference_cache=inference_cache, 

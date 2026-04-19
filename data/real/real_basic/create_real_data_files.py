@@ -233,7 +233,7 @@ df_pure_combined.loc['disease_type'] = disease_labels
 df_clean_healthy.to_csv(script_dir / 'healthy_data.csv')
 df_combined_disease.to_csv(script_dir / 'disease_data.csv')
 df_combined_theta.to_csv(script_dir / 'theta_values.csv')
-df_pure_combined.to_csv(script_dir / 'pure_disease_combined.csv')
+df_pure_combined.to_csv(script_dir / 'pure_disease_truth.csv')
 
 print(f"All datasets saved successfully to: {script_dir}")
 

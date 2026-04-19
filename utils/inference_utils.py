@@ -3,8 +3,8 @@ import traceback
 import numpy as np
 
 import config as cfg
-import model_utils as mu
-import data_utils as du
+import utils.model_utils as mu
+import utils.data_utils as du
 
 def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
     """

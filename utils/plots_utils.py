@@ -597,7 +597,7 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
                         
                         # 5. Annotations
                         gene_names = test_df_full.drop(columns=['theta_value', 'disease_type'], errors='ignore').columns
-                        dynamic_thresh = np.percentile(flat_input, 99)
+                        dynamic_thresh = 1500
                         _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, dynamic_thresh)
 
                     # Clean up grid inner labels
@@ -628,3 +628,147 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
         data_tag = "simple" if is_simple else "complex"
         plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
         plt.close(fig)
+
+
+def analyze_disease_portion_reconstruction_scatter(labels_dict, inference_cache, test_df_full, true_disease_input, scaler, scale_bool, gene_size, save_path, mode, is_simple=False, is_mixed=False):
+    """
+    Evaluates Disease Branch Reconstruction using pre-computed inference cache.
+    Dynamically switches between Boxplots and Scatter plots based on is_simple.
+    """
+    tag = "scaled" if scale_bool else "unscaled"
+    # input_size = test_df_full.shape[1]
+    # gene_size = input_size - 1
+    _, true_healthy = du.load_reconstruction_data('healthy', mode)
+    
+    # Plotting Loop
+    for base_name, models in labels_dict.items():
+        n_rows = len(cfg.ENCODING_SIZES)
+        n_cols = len(models)
+        
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 6 * n_rows), squeeze=False)
+        plot_type = "Boxplot" if is_simple else "Scatter"
+        fig.suptitle(f"Disease Signal Isolation ({plot_type} | Base: {base_name.upper()})\n"
+                     f"True Pure Disease vs. Disease Branch Output (theta: {mode})", 
+                     fontsize=18, fontweight='bold', y=0.98)
+                     
+        for row_idx, enc in enumerate(cfg.ENCODING_SIZES):
+            for col_idx, (model_label, folder_tag) in enumerate(models.items()):
+                ax = axes[row_idx, col_idx]
+                try:
+                    model_outputs = inference_cache[base_name][enc].get(model_label)
+                    
+                    if model_outputs is None or model_outputs['disease'] is None:
+                        ax.text(0.5, 0.5, "Model / Output Not Found", ha='center', color='red')
+                        continue
+                        
+                    recon_d = model_outputs['disease']
+                        
+                    # Extract Data
+                    test_truth_d = true_disease_input.reindex(test_df_full.index)
+                    test_truth_h = true_healthy.reindex(test_df_full.index)
+                    benchmark_truth = test_truth_d.fillna(test_truth_h)
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_d).detach().cpu().numpy()
+                        # input_final = scaler.inverse_transform(benchmark_truth.values)   
+                    else:
+                        recon_final = recon_d.detach().cpu().numpy()
+                        # input_final = benchmark_truth.values
+                    flat_input = benchmark_truth.values.flatten()
+                    flat_recon = recon_final.flatten()
+                    
+                    # Route to the correct plot type
+                    if is_simple:
+                        _plot_simple_boxplot(
+                            ax=ax, 
+                            test_truth_disease=test_truth_d, 
+                            test_truth_healthy=true_healthy.reindex(test_df_full.index).values, 
+                            recon_h=model_outputs['healthy'], 
+                            recon_d=recon_d, 
+                            thetas=test_df_full['theta_value'], 
+                            model_label=model_label, 
+                            enc=enc
+                        )
+                    else:
+                        disease_map = {0: "Healthy", 1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+                        color_map = {
+                            "Healthy": "#2ecc71",         # Green
+                            "Disease A (CRC)": "#d43220", # Red
+                            "Disease B (SCLC)": "#870fb6",# Purple
+                            "Disease": "#d43220"          # Fallback Red
+                        }
+                        
+                        # color_map = {"Disease A (CRC)": "#d43220", "Disease B (SCLC)": "#870fb6"}
+                        # disease_map = {1: "Disease A (CRC)", 2: "Disease B (SCLC)"}
+                        
+                        if 'disease_type' in test_df_full.columns:
+                            sample_labels = test_df_full['disease_type'].map(disease_map).fillna("Unknown")
+                        else:
+                            sample_labels = pd.Series(["Disease"] * len(test_df_full))
+                            color_map = {"Disease": "#8e44ad"} 
+                            
+                        flat_labels = np.repeat(sample_labels.values, gene_size)
+                        # _plot_complex_scatter(ax, flat_input, flat_recon, flat_labels, color_map, model_label, enc)
+                        
+                        threshold = 1500
+                        mask_2d = (recon_final > threshold)  | (benchmark_truth.values > threshold )
+                        gene_names = benchmark_truth.columns
+                        
+                        genes_over_thresh = gene_names[mask_2d.any(axis=0)]
+                        
+                        if len(genes_over_thresh) > 0:
+                            print(f"\n[Model: {model_label} | Enc: {enc}]")
+                            print(f"Genes reconstructed > {threshold}: {genes_over_thresh.tolist()}. Num is {len(genes_over_thresh)}")
+                        
+                        # 2. GRAPHING: Annotate the points on the scatter plot
+                        # Find the 1D indices where the flattened reconstruction is over the threshold
+                        over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold ))[0]
+                        
+                        # Limit annotations to prevent text-overlap on extremely dense graphs
+                        max_annotations = 30
+                        
+                        for i, flat_idx in enumerate(over_thresh_indices):
+                            if i >= max_annotations:
+                                print(f"  ... and {len(over_thresh_indices) - max_annotations} more points (annotations truncated for readability).")
+                                break
+                                
+                            x_val = flat_input[flat_idx]
+                            y_val = flat_recon[flat_idx]
+                            
+                            # Map the 1D index back to the gene column index using modulo
+                            gene_col_idx = flat_idx % gene_size
+                            gene_name = gene_names[gene_col_idx]
+                            
+                            # Draw the text next to the point
+                            ax.annotate(gene_name, 
+                                        (x_val, y_val), 
+                                        xytext=(5, 5), # Offset the text slightly
+                                        textcoords='offset points',
+                                        fontsize=8, 
+                                        color='black',
+                                        alpha=0.7)
+                    # Clean up grid inner labels
+                    if col_idx > 0: ax.set_ylabel("")
+                    if row_idx < n_rows - 1: ax.set_xlabel("")
+                    
+                except Exception as e:
+                    traceback.print_exc()
+                    ax.text(0.5, 0.5, "Plotting Error", ha='center', color='red')
+
+        # Add the Universal Master Legend
+        if not is_simple:
+            legend_elements = [
+                Line2D([0], [0], marker='o', color='w', label='Disease A (CRC)', markerfacecolor='#d43220', markersize=8),
+                Line2D([0], [0], marker='o', color='w', label='Disease B (SCLC)', markerfacecolor='#870fb6', markersize=8),
+                Line2D([0], [0], color="#2D2A2A", linestyle='--', linewidth=1, label='Perfect Reconstruction')
+            ]
+            fig.legend(handles=legend_elements, loc='upper right', bbox_to_anchor=(0.98, 0.98), fontsize=10)
+
+        # Save Figure
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}"
+        # os.makedirs(out_folder, exist_ok=True)
+
+        data_tag = "simple" if is_simple else "complex"
+        plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
+        plt.close(fig)
+  
