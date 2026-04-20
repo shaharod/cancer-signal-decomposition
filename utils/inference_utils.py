@@ -83,3 +83,58 @@ def prepare_scatter_data(inference_cache, base_name, enc, model_label,
         traceback.print_exc()
         return None
     
+
+import umap
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
+# -------------------------------------------------------------------
+# LATENT EXTRACTION & COORDINATE GENERATION
+# -------------------------------------------------------------------
+
+def get_standalone_latents(model_type, input_size, enc_sizes, scale_bool, test_set, phase):
+    latents = {}
+    for enc in enc_sizes:
+        _, z = mu.create_load_standalone_model(phase=phase, m_type=model_type, enc=enc, scale_bool=scale_bool, input_size=input_size, test_t=test_set)
+        latents[f"{model_type}_enc{enc}"] = z
+    return latents
+
+def get_mix_latents(mix_type, input_size, enc_sizes, scale_tag, is_mixed, test_t):
+    latents = {}
+    for enc in enc_sizes:
+        _, _, _, z = mu.create_load_mix_model(folder_tag=mix_type, test_set=test_t, gene_size=input_size, enc=enc, scale_tag=scale_tag)
+        latents[f"{mix_type}_enc{enc}"] = z
+        ## NOTE: the latent in mix models is the latent of disease part
+    return latents
+
+def generate_coords(Z, method="umap", **kwargs):
+    """Unified interface for dimensionality reduction."""
+    if method == "pca":
+        return PCA(n_components=2).fit_transform(Z)
+    elif method == "umap":
+        reducer = umap.UMAP(
+            n_neighbors=kwargs.get('n_neighbors', 15),
+            min_dist=kwargs.get('min_dist', 0.1),
+            random_state=42
+        )
+        return reducer.fit_transform(Z)
+    elif method == "tsne":
+        return TSNE(
+            n_components=2, 
+            perplexity=kwargs.get('perplexity', 30),
+            init="pca", 
+            random_state=42
+        ).fit_transform(Z)
+    raise ValueError(f"Unknown method: {method}")
+
+def save_latent_batch(latents_dict, phase, scaled, methods=["pca", "umap"], is_mixed=False):
+    """Processes PyTorch latents into 2D coordinates and caches them."""
+    scale_str = "scaled" if scaled else "unscaled"
+    
+    for name, Z in latents_dict.items():
+        model_tag = name.split("_enc")[0]
+        enc_size = name.split("_enc")[-1]
+        model_root = cfg.get_path(phase, scale_str, model_tag, enc_size, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
+
+        for m in methods:
+            coords = generate_coords(Z, method=m)
+            np.save(model_root / f"{m}_coords.npy", coords)

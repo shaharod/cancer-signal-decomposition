@@ -12,19 +12,18 @@ class Trainer:
         # self.optimizer = torch.optim.Adam(model.parameters(), lr=lr)
         self.criterion = nn.MSELoss()
 
-        # 1. Collect what is actually trainable
+        # collect trainable
         trainable_params = [p for p in model.parameters() if p.requires_grad]
         
-        # 2. UTILIZATION OF YOUR FLAG
         if hasattr(model, 'is_mix_model'):
-            # If it's a MixModel, check if the Disease part was supposed to train
+            # ff it's a MixModel, check if the Disease part was supposed to train
             if model.has_trainable_disease and len(trainable_params) == 0:
                 raise ValueError(
                     "CRITICAL: Disease component has trainable layers, but no parameters "
-                    "were passed to the optimizer! Did you accidentally freeze the model?"
+                    "were passed to the optimizer! Did we freeze the model?"
                 )
         
-        # 3. Optimizer Setup
+        # 
         if len(trainable_params) > 0:
             self.optimizer = torch.optim.Adam(trainable_params, lr=lr)
             total_weights = sum(p.numel() for p in trainable_params)
@@ -42,20 +41,19 @@ class Trainer:
         tensor = tensor.to(self.device)
         num_genes = self.model.in_features
         
-        # 1. Choose input based on model type
+        # Choosing input based on model type
         if hasattr(self.model, 'is_mix_model') and self.model.is_mix_model:
             outputs = self.model(tensor) # Sends 20,007
         else:
             outputs = self.model(tensor[:, :num_genes]) # Sends 20,006
 
-        # 2. Flexible unpacking (handles recon OR (recon, latent))
+        #flexible unpacking (handles recon or (recon, latent) cases)
         recon = outputs[0] if isinstance(outputs, (tuple, list)) else outputs
         return recon
     
     def get_mse(self, tensor):
         """
         Calculates MSE in the original (unscaled) domain.
-        (Replaces the old 'comp_loss')
         """
         self.model.eval()
         tensor = tensor.to(self.device)
@@ -96,7 +94,7 @@ class Trainer:
 
     def fit(self, train_tensor, val_tensor, epochs, batch_size=32, jump=5):
         """
-        Full training orchestration.
+        Full training steps.
         Returns history and best_state.
         """
         loader = DataLoader(TensorDataset(train_tensor), batch_size=batch_size, shuffle=True)

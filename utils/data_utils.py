@@ -329,3 +329,14 @@ def load_reconstruction_data(phase, mode):
     
     return df_mixed, df_pure
 
+def choose_sig_list(phase, disease_type):
+    basic_l = ["Megakaryocyte", "Neutrophils"]
+    if phase == "synthetic_complex":
+
+        match disease_type:
+            case "Healthy":
+                return basic_l
+            case "DiseaseA": #crc
+                return ["Colon", "Rectum", "Colorectal", "Digestive", "GI", "GI Mucosa"] + basic_l
+            case "DiseaseB":
+                return ["Lung"] + basic_l

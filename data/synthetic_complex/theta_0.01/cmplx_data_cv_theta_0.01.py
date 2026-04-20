@@ -288,7 +288,7 @@ final_healthy = apply_sequencing_noise(pure_healthy_data)
 
 df_healthy = pd.DataFrame(final_healthy, index=df_real_healthy.index, 
                           columns=[f'Healthy-Sample{i}' for i in range(pure_healthy_data.shape[1])])
-df_healthy.to_csv('healthy_data.csv')
+df_healthy.to_csv(script_dir/'healthy_data.csv')
 
 # if we save Pure Disease Profiles
 df_pure_A = pd.DataFrame(disease_A_pool, index=df_real_healthy.index, 
@@ -323,7 +323,7 @@ given_all_labels = np.concatenate([given_labels_A, given_labels_B])
 
 ## save one combined csv of the pure disease truth of each disease sample (a and b)
 combined_pure_df = pd.concat([df_pure_A, df_pure_B], axis=1)
-combined_pure_df.to_csv("pure_disease_truth.csv")
+combined_pure_df.to_csv(script_dir/"pure_disease_truth.csv")
 print(combined_pure_df.shape)
 
 ## save theta values of all disease samples in one file
@@ -340,7 +340,7 @@ combined_theta_df = pd.DataFrame({
     'disease_type': given_all_labels
 }, index=sample_names)
 
-combined_theta_df.to_csv("theta_values.csv", index=True)
+combined_theta_df.to_csv(script_dir/"theta_values.csv", index=True)
 print(f"Combined Theta Shape: {combined_theta_df.shape}")
 
 # %%
@@ -350,7 +350,7 @@ print(f"Combined Theta Shape: {combined_theta_df.shape}")
 # We use axis=1 to stack the 'B' patients next to the 'A' patients
 combined_mixed_uniform_df = pd.concat([df_mixed_A, df_mixed_B], axis=1)
 combined_mixed_uniform_df.loc['disease_type'] = given_all_labels
-combined_mixed_uniform_df.to_csv("disease_data_uniform_theta.csv")
+combined_mixed_uniform_df.to_csv(script_dir/"disease_data_uniform_theta.csv")
 
 print(f"Saved Uniform Theta Mix. Shape: {combined_mixed_uniform_df.shape}") 
 # Expected: (20000, 300)
@@ -399,13 +399,13 @@ sample_names_05 = list(df_mixed_A_05.columns) + list(df_mixed_B_05.columns)
 # Combine them side-by-side
 combined_mixed_05_df = pd.concat([df_mixed_A_05, df_mixed_B_05], axis=1)
 combined_mixed_05_df.loc['disease_type'] = given_all_labels
-combined_mixed_05_df.to_csv("disease_data_theta05.csv")
+combined_mixed_05_df.to_csv(script_dir/"disease_data_theta05.csv")
 combined_theta_05_df = pd.DataFrame({
     'theta_value': np.concatenate([given_thetas_A_05, given_thetas_B_05]),  # what model gets
     'real_theta': np.concatenate([true_thetas_A_05, true_thetas_B_05]),     # actual generating theta
     'disease_type': given_all_labels
 }, index=sample_names_05)
-combined_theta_05_df.to_csv('theta_values05.csv')
+combined_theta_05_df.to_csv(script_dir/'theta_values05.csv')
 
 print(f"Saved Fixed Theta (0.5) Mix. Shape: {combined_mixed_05_df.shape}")
 # Expected: (20000, 400)

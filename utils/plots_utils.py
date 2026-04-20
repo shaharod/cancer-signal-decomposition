@@ -1,5 +1,5 @@
 import traceback
-
+import torch
 from matplotlib.lines import Line2D
 import seaborn as sns
 from scipy import stats
@@ -472,8 +472,11 @@ def _plot_evaluation_scatter(ax, flat_input, flat_recon, flat_labels, color_map,
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.set_title(title, fontweight='bold')
+    # Set the upper limits of the X and Y axes to 1500
+    ax.set_xlim(right=1500)
+    ax.set_ylim(top=1500)
 
-def _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, threshold=1500, max_annotations=30):
+def _annotate_outliers1(ax, flat_input, flat_recon, gene_names, gene_size, threshold=1500, max_annotations=30):
     """Finds and annotates highly expressed genes on the scatter plots."""
     over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold))[0]
     
@@ -499,6 +502,80 @@ def _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, thresh
                     xytext=(5, 5), textcoords='offset points',
                     fontsize=8, color='black', alpha=0.7)
         
+def _annotate_outliers(ax, flat_input, flat_recon, gene_names, sample_names, gene_size, threshold):
+    """Annotates points where the residual error exceeds the threshold with Sample & Gene."""
+    # Calculate absolute error
+    residuals = np.abs(flat_input - flat_recon)
+    
+    # Find flat indices of all outliers
+    outlier_indices = np.where(residuals > threshold)[0]
+
+    for idx in outlier_indices:
+        # ---------------------------------------------------------
+        # 🛠️ THE FIX: Translate flat 1D index back to 2D (Row, Col)
+        # ---------------------------------------------------------
+        sample_idx = idx // gene_size
+        gene_idx = idx % gene_size
+        
+        # Look up the actual names
+        sample = sample_names[sample_idx]
+        gene = gene_names[gene_idx]
+        
+        x_val = flat_input[idx]
+        y_val = flat_recon[idx]
+        
+        # Create a combined label
+        label_text = f"{sample}\n({gene})"
+        
+        # Annotate the plot
+        ax.annotate(
+            label_text, 
+            (x_val, y_val), 
+            textcoords="offset points", 
+            xytext=(5, 5), 
+            ha='left', 
+            fontsize=7,
+            color="#c0392b", # A nice subtle red for outliers
+            arrowprops=dict(arrowstyle="->", color='gray', lw=0.5, alpha=0.7)
+        )
+import pandas as pd
+import numpy as np
+
+def print_top_outliers(truth_2d, recon_2d, sample_names, gene_names, threshold=1500, top_n=20):
+    """Instantly finds and prints the biggest reconstruction errors."""
+    # 1. Calculate the error matrix directly in 2D
+    residuals = np.abs(truth_2d - recon_2d)
+    
+    # 2. Get the 2D coordinates of the outliers
+    sample_indices, gene_indices = np.where(residuals > threshold)
+    
+    # 3. Build a list of dictionaries
+    outliers = []
+    for s_idx, g_idx in zip(sample_indices, gene_indices):
+        outliers.append({
+            "Sample": sample_names[s_idx],
+            "Gene": gene_names[g_idx],
+            "True_Val": round(truth_2d[s_idx, g_idx], 2),
+            "Recon_Val": round(recon_2d[s_idx, g_idx], 2),
+            "Error": round(residuals[s_idx, g_idx], 2)
+        })
+        
+    # 4. Convert to a DataFrame and sort by the biggest errors
+    df_outliers = pd.DataFrame(outliers)
+    
+    if df_outliers.empty:
+        print(f"\n✅ No outliers found above threshold {threshold}")
+        return df_outliers
+        
+    df_outliers = df_outliers.sort_values(by="Error", ascending=False)
+    
+    # 5. Print a beautiful table to the terminal
+    print(f"\n🚨 Found {len(df_outliers)} Outliers (Showing Top {top_n}) 🚨")
+    print(df_outliers.head(top_n).to_string(index=False))
+    print("-" * 50)
+    
+    return df_outliers
+
 def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_theta, 
                              true_disease_input, gene_size, scaler, scale_bool, 
                              save_path, mode, is_simple=False, is_mixed=False, target_type='total'):
@@ -508,10 +585,6 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
     """
     tag = "scaled" if scale_bool else "unscaled"
     
-    # Pre-load healthy baseline if we are doing disease isolation
-    if target_type == 'disease':
-        _, true_healthy = du.load_reconstruction_data('healthy', mode)
-
     for base_name, models in labels_dict.items():
         n_rows = len(cfg.ENCODING_SIZES)
         n_cols = len(models)
@@ -541,18 +614,37 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
                     
                     # 2. Extract Ground Truth based on target type
                     if target_type == 'total':
-                        truth_array = test_n_theta.detach().cpu().numpy()
+                        # truth_array = test_n_theta.detach().cpu().numpy()
+                        mask = np.ones(len(test_df_full), dtype=bool)
                     else:
-                        test_truth_d = true_disease_input.reindex(test_df_full.index)
-                        test_truth_h = true_healthy.reindex(test_df_full.index)
-                        benchmark_truth = test_truth_d.fillna(test_truth_h)
-                        truth_array = benchmark_truth.values
+                        mask = (test_df_full['theta_value'] > 0).values
 
-                    # 3. Handle Scaling
-                    if scale_bool and scaler is not None:
-                        recon_final = du.inverse_scale(scaler, recon_tensor).detach().cpu().numpy()
+                        # test_truth_d = true_disease_input.reindex(test_df_full.index)
+                        # test_truth_h = true_healthy.reindex(test_df_full.index)
+                        # benchmark_truth = test_truth_d.fillna(test_truth_h)
+                        # truth_array = benchmark_truth.values
+                    mask_tensor = torch.tensor(mask)
+                    current_df = test_df_full.iloc[mask]
+                    recon_sliced = recon_tensor[mask_tensor]
+                    if target_type == 'total':
+                        truth_array = test_n_theta[mask_tensor].detach().cpu().numpy()
                     else:
-                        recon_final = recon_tensor.detach().cpu().numpy()
+                        # Reindex against ONLY the disease samples
+                        test_truth_d = true_disease_input.reindex(current_df.index)
+                        truth_array = test_truth_d.values
+                    
+                    truth_array = truth_array[:, :gene_size]
+
+                    # Handle Scaling
+                    if scale_bool and scaler is not None:
+                        recon_final = du.inverse_scale(scaler, recon_sliced).detach().cpu().numpy()
+                    else:
+                        recon_final = recon_sliced.detach().cpu().numpy()
+
+                    gene_names = current_df.drop(columns=['theta_value', 'disease_type'], errors='ignore').columns
+                    sample_names = current_df.index
+                    print(f"\n[Checking {model_label} - Enc {enc}]")
+                    print_top_outliers(truth_array, recon_final, sample_names, gene_names, threshold=1500, top_n=30)
 
                     flat_input = truth_array.flatten()
                     flat_recon = recon_final.flatten()
@@ -562,7 +654,7 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
                         _plot_simple_boxplot(
                             ax=ax, 
                             test_truth_disease=test_truth_d, 
-                            test_truth_healthy=true_healthy.reindex(test_df_full.index).values, 
+                            test_truth_healthy=None,
                             recon_h=model_outputs['healthy'], 
                             recon_d=recon_tensor, 
                             thetas=test_df_full['theta_value'], 
@@ -571,17 +663,12 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
                         )
                     else:
                         # Prepare Labels and Colors
-                        if 'disease_type' in test_df_full.columns:
-                            sample_labels = test_df_full['disease_type'].map(DISEASE_MAP).fillna("Unknown")
+                        if 'disease_type' in current_df.columns:
+                            sample_labels = current_df['disease_type'].map(DISEASE_MAP).fillna("Unknown")
                         else:
-                            lbl = "Healthy" if target_type == 'total' else "Disease"
-                            lbl_alt = "Disease"
-                            if target_type == 'total':
-                                sample_labels = np.where(test_df_full['theta_value'] == 0, lbl, lbl_alt)
-                            else:
-                                sample_labels = pd.Series([lbl_alt] * len(test_df_full))
-                            sample_labels = pd.Series(sample_labels)
-                            
+                            sample_labels = np.where(current_df['theta_value'] == 0, "Healthy", "Disease")
+
+                        sample_labels = pd.Series(sample_labels)  
                         flat_labels = np.repeat(sample_labels.values, gene_size)
                         
                         if is_simple and target_type == 'total':
@@ -596,9 +683,9 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
                             _plot_evaluation_scatter(ax, flat_input, flat_recon, flat_labels, COLOR_MAP, title, xlabel, ylabel, line_color)
                         
                         # 5. Annotations
-                        gene_names = test_df_full.drop(columns=['theta_value', 'disease_type'], errors='ignore').columns
+                        
                         dynamic_thresh = 1500
-                        _annotate_outliers(ax, flat_input, flat_recon, gene_names, gene_size, dynamic_thresh)
+                        _annotate_outliers(ax, flat_input, flat_recon, gene_names, sample_names, gene_size, dynamic_thresh)
 
                     # Clean up grid inner labels
                     if col_idx > 0: ax.set_ylabel("")
@@ -625,8 +712,9 @@ def plot_reconstruction_grid(labels_dict, inference_cache, test_df_full, test_n_
         out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / f"Tournament_H-{base_name}"
         out_folder.mkdir(parents=True, exist_ok=True)
 
-        data_tag = "simple" if is_simple else "complex"
-        plt.savefig(out_folder / f"{save_path}_{tag}_{data_tag}.png", dpi=150)
+        data_tag = "_simple" if is_simple else "_complex"
+        if cfg.SYNTHETIC_DATA != "synthetic": data_tag = ""
+        plt.savefig(out_folder / f"{save_path}_{tag}{data_tag}.png", dpi=150)
         plt.close(fig)
 
 

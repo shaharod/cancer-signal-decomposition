@@ -34,33 +34,14 @@ class UniversalMixModel(nn.Module):
         # # x_combined might be [genes | theta] or just [genes]
         # if x_combined.shape[1] > self.in_features:
         #     raise ValueError(f"why am i here")
+
         # Both components return (recon, latent)
         x_hat_h, _ = self.healthy(x)
         x_hat_d, z_d = self.disease(x)
         
-        # Apply mixing: x_mix = theta * disease + (1 - theta) * healthy
+        # x_mix = theta * disease + (1 - theta) * healthy
         x_hat_mix = (theta * x_hat_d) + ((1 - theta) * x_hat_h)
-        # --- DEBUG PRINT: HEALTHY SAMPLE RECONSTRUCTION ---
-        # Find indices where theta is exactly 0
-        # healthy_indices = (theta == 0).nonzero(as_tuple=True)[0]
 
-        # if healthy_indices.numel() > 0:
-        #     # Pick the first healthy sample found in this batch
-        #     idx = healthy_indices[0]
-            
-            # print(f"\n--- [DEBUG] Internal Values for Healthy Sample (Index {idx}) ---")
-            # print(f"Theta: {theta[idx].item()}")
-            
-            # # Check a few genes from the Healthy Module (0-499)
-            # # They should be ~100 in x_hat_h and ~0 in x_hat_d
-            # print(f"Healthy Branch - Genes 0-5: {x_hat_h[idx, :5].detach().cpu().numpy()}")
-            # print(f"Disease Branch - Genes 0-5: {x_hat_d[idx, :5].detach().cpu().numpy()}")
-            
-            # # Check a few genes from the Disease Module (500-999)
-            # # They should be ~0 in BOTH branches for a healthy sample
-            # print(f"Healthy Branch - Genes 500-505: {x_hat_h[idx, 500:505].detach().cpu().numpy()}")
-            # print(f"Disease Branch - Genes 500-505: {x_hat_d[idx, 500:505].detach().cpu().numpy()}")
-            # print("-----------------------------------------------------------\n")
         return x_hat_mix, x_hat_d, x_hat_h, z_d # NOTE i added healthy part to return, might lead to memory problems but shouldnt crash anything
     
     def get_latents(self, x_input):

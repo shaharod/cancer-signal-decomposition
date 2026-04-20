@@ -1,5 +1,5 @@
 import traceback
-
+import torch
 import config as cfg
 
 import utils.analysis_utils as au
@@ -166,11 +166,18 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     )
     test_df_full = info['test_df_full'].fillna(value=0.0)      # Contains [Genes | Theta | Type]
 
-    gene_size = test_t.shape[1] - 1
     # test_w_theta_t = torch.Tensor(test_t.values).float()
     
-    print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_t.shape[0]}")
 
+    bad_samples = ["SCLC0232-519_NA_H3K4me3-725_01072023-95"]
+    keep_mask = ~test_df_full.index.isin(bad_samples)
+    # 2. Filter the Pandas DataFrame
+    test_df_full = test_df_full[keep_mask]
+    true_disease = true_disease.drop(index=bad_samples, errors='ignore')
+
+    test_t = test_t[torch.tensor(keep_mask)]
+    gene_size = test_t.shape[1] - 1
+    print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_t.shape[0]}")
     # ==========================================
     # 2. GENERATE INFERENCE CACHE 
     # ==========================================
@@ -181,28 +188,26 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     
     actual_gene_size = test_genes_df.shape[1]
     test_no_theta_t = torch.Tensor(test_genes_df.values).float()
-    if gene_size != gene_size:
+    if gene_size != actual_gene_size:
         raise ValueError(f"why arent they the same size?: {gene_size} vs {actual_gene_size}")
     
     ## removing metadatacols also from true disease?
     true_disease = true_disease.drop(columns=metadata_cols, errors="ignore")
+
+
+
     # ==========================================
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================
-    # pu.analyze_disease_portion_reconstruction_scatter(
-    #     labels_dict=labels_dict, inference_cache=inference_cache,
-    #     test_df_full=test_df_full, true_disease_input=true_disease, 
-    #     scaler=scaler, scale_bool=scale_bool, gene_size=gene_size,
-    #     save_path="", is_mixed=is_mixed, mode=mode
+    
+    # print("🎨 Drawing Disease Branch Scatter Plots...")
+    # pu.plot_reconstruction_grid(
+    #     labels_dict=labels_dict, inference_cache=inference_cache, 
+    #     test_df_full=test_df_full, test_n_theta=test_no_theta_t,
+    #     true_disease_input=true_disease, gene_size=actual_gene_size, 
+    #     scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_disease", 
+    #     mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='disease'
     # )
-    print("🎨 Drawing Disease Branch Scatter Plots...")
-    pu.plot_reconstruction_grid(
-        labels_dict=labels_dict, inference_cache=inference_cache, 
-        test_df_full=test_df_full, test_n_theta=test_no_theta_t,
-        true_disease_input=true_disease, gene_size=actual_gene_size, 
-        scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_disease", 
-        mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='disease'
-    )
     
     print("🎨 Drawing Total Mix Scatter Plots...")
     pu.plot_reconstruction_grid(
@@ -212,7 +217,15 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
         scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_total", 
         mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='total'
     )
-
+    raise
+    pu.plot_reconstruction_grid(
+        labels_dict=labels_dict, inference_cache=inference_cache, 
+        test_df_full=test_df_full, test_n_theta=test_no_theta_t,
+        true_disease_input=true_disease, gene_size=actual_gene_size, 
+        scaler=scaler, scale_bool=scale_bool, save_path=save_path+"_total", 
+        mode=mode, is_simple=is_simple, is_mixed=is_mixed, target_type='total'
+    )
+    
     print("🎨 Drawing Disease Recon MSE Lines...")
     analyze_disease_reconstruction_mse_lines( 
         labels_dict=labels_dict, inference_cache=inference_cache, 

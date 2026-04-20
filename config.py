@@ -15,7 +15,7 @@ SYNTHETIC_TYPE = 'complex'
 
 # Choose Variant. 
 # Synthetic Options: 'dif_dp', 'dif_hp', 'theta_0.1', 'theta_0.01', 'theta_0.001', 'theta_0.005', 'theta_lim_0.7', 'theta_no_lim'
-# Real Options: 'basic', 'none'
+# Real Options: 'basic', 'gene_reduc'
 VARIANT = 'basic' 
 
 # Choose Theta Mode: 'true', 'fixed', 'random'
@@ -64,13 +64,14 @@ def get_disease_gene_path(mode_val):
 def get_data_dir():
     return DATA_SUB
 
+##NOTE: Havent fixed this yet
 def change_data_dir(suffix):
     DATA_SUB = DATA_PATH
     if not SYNTHETIC_DATA:
         DATA_SUB = DATA_SUB / 'real'
     
 # ---- Hyperparameters ----
-EPOCHS_NUM     = 300
+EPOCHS_NUM     = 400
 BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
@@ -78,7 +79,7 @@ EPOCH_JUMP     = 5
 def choose_enc_layers():
     if not SYNTHETIC_DATA or (SYNTHETIC_DATA and SYNTHETIC_TYPE == 'complex'):
         # return [16, 32, 64, 128], 512, 128
-        return [2, 4, 8, 16], 512, 64 #, 4, 8, 16
+        return [2, 4, 8, 16], 512, 64 #
     else:
         return [8, 16], 32, 16
 
@@ -93,7 +94,7 @@ SIG_LIST        = ['Megakaryocyte', 'Neutrophils']
 MODELS_SUBFOLDER = 'trained_models'
 PLOTS_SUBFOLDER = 'plots'
 
-def get_experiment_suffix() -> str:
+def get_experiment_suffix():
     """Dynamically grabs the correct suffix for the output folder."""
     if not SYNTHETIC_DATA:
         return f"_{VARIANT}" if VARIANT != 'none' else ""

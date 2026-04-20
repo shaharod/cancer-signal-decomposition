@@ -11,7 +11,7 @@ def train_all_healthy():
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
         
-        # 1. Prepare Data & Split
+        # prepare data & split
         train_h, test_h, scaler = data_utils.get_ready_tensors(
             cfg.HEALTHY_GENES_PATH, 
             split_path=cfg.get_split_path("healthy", tag, is_mixed=False),
@@ -21,11 +21,11 @@ def train_all_healthy():
         )
         ## here, if we had disease type col - its removed
         
-        # Add these lines to move data to the Mac GPU
+        # move data to the mac GPU
         train_h = train_h.to(cfg.DEVICE)
         test_h = test_h.to(cfg.DEVICE)
 
-        # 2. PCA Baselines (Train and save immediately)
+        # PCA Baselines (train and save)
         pca_models = pca_utils.train_pca_collection(train_h, cfg.ENCODING_SIZES)
         for enc, mod in pca_models.items():
             path = cfg.get_path(phase="healthy", scale_tag=tag, model_type="pca", enc=enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
@@ -38,7 +38,7 @@ def train_all_healthy():
                 path
                 )
 
-        # 3. AE Tournament
+        # AE Tournament
         for arch in cfg.MODEL_TYPES:
             for enc in cfg.ENCODING_SIZES:
                 print(f"Training: {arch} | {tag} | Enc: {enc}")
@@ -68,7 +68,7 @@ def fix_missing_meta():
                 history_path = os.path.join(path, "history.json")
                 meta_path = os.path.join(path, "best_meta.json")
 
-                # If history exists but meta doesn't...
+                # If history exists but meta doesn't
                 if os.path.exists(history_path) and not os.path.exists(meta_path):
                     history = io.load_results(path, "history.json")
                     

@@ -17,10 +17,10 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         ########### USE BOTH HEALTHY AND DISEASE SAMPLES ##############
         if is_mixed:
             df_healthy = data_utils.prepare_and_align_data(cfg.HEALTHY_GENES_PATH, theta_path=None)
-            # 2. Load Disease Data (Theta > 0)
+            # load disease data (theta > 0)
             df_disease = data_utils.prepare_and_align_data(disease_gene_path, theta_path=cfg.get_theta_path(mode_val), mode=mode_val) 
             
-            # 3. Concatenate 
+            # concat
             df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
             df_combined['disease_type'] = df_combined['disease_type'].fillna(0)
 
@@ -44,13 +44,9 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 theta=mode_val
             )
 
-        # train_d = train_d[:, :-1]
-        # test_d = test_d[:, :-1]
         input_dim = train_d.shape[1] - 1 
         numpy_array = train_d.detach().cpu().numpy()
 
-        # 2. Convert to a Pandas DataFrame
-        df = pd.DataFrame(numpy_array)
         # --- AUDIT PRINT ---
         print(f"Tensor Shape: {train_d.shape}") # Should be (Samples, 20007)
 
@@ -60,17 +56,17 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
         print("First 5 samples (Last 4 Genes + Theta Column):")
         print(audit_slice.cpu().numpy())
 
-        # Check if Theta is within [0, 1]
+        # some theta info
         thetas = train_d[:, -1]
         print(f"Theta Statistics -> Mean: {thetas.mean():.4f}, Min: {thetas.min():.4f}, Max: {thetas.max():.4f}")
         print("-" * 50)
 
         for enc in cfg.ENCODING_SIZES:
-            # 1. LOAD HEALTHY PCA BASELINE
+            # LOAD HEALTHY PCA BASELINE
             pca_path = cfg.get_path("healthy", tag, "pca", enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed) / "model.joblib"
             pca_h_obj = pca_utils.load_pca_model(pca_path) if pca_path.exists() else None
             
-            # 2. COLLECT ALL HEALTHY AE BASES
+            # COLLECT ALL HEALTHY AE BASES
             healthy_library = []
             if pca_h_obj:
                 healthy_library.append(("pca", pca_h_obj))
@@ -82,15 +78,14 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                     h_model.load_state_dict(torch.load(h_path, weights_only=True))                   
                     healthy_library.append((h_arch, h_model))
             
-            # --- BENCHMARK: PCA-PCA MIX ---
+            # PCA-PCA MIX
             if pca_h_obj is not None:
                 print(f"Calculating PCA-PCA Benchmark | {tag} | Enc: {enc}")
 
                 # Filter for disease-only samples for the PCA FIT ONLY
                 disease_mask = (train_d[:, -1] > 0)
                 disease_only_features = train_d[disease_mask, :-1]
-                # Train a standard PCA on Disease data (gene portion only)
-                # Note: pca_utils needs this function to return an sklearn PCA object
+                # Training a standard PCA on Disease data (gene portion only)
                 pca_d_obj = pca_utils.train_single_pca(disease_only_features, enc) 
                 
                 full_pca_mix = ModelFactory.create_mix_model(pca_h_obj, pca_d_obj)
@@ -105,7 +100,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                     {"val_mse": pca_bench_val_mse, "train_mse": pca_bench_train_mse},
                     out_dir, "results.json"
                     )
-            # --- HYBRID TOURNAMENT: Healthy AE + Disease PCA ---
+            # TOURNAMENT: Healthy AE + Disease PCA
             # for h_name, h_obj in healthy_library:
             #     if h_name == "pca": continue # Already handled by benchmark
                 
@@ -129,9 +124,10 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             #     # Save the Disease PCA object so the grid can load it
             #     joblib.dump(pca_d_obj, out_dir / "model.joblib")
 
-            # --- TOURNAMENT: CROSS-ARCHITECTURE AE MIX ---
+            # TOURNAMENT: CROSS-ARCHITECTURE AE MIX
             for d_arch in cfg.MODEL_TYPES:
                 for h_name, h_obj in healthy_library:
+                    ## NOTE: currently running only with pca as healthy
                     if h_name != "pca" and h_name != "PCA": continue
                     label = f"mix_H-{h_name}_D-{d_arch}"
 
@@ -156,7 +152,7 @@ if __name__ == "__main__":
         print(f">>> STARTING EXPERIMENT: {mode.upper()}")
         print("="*40)
         
-        # Set the unified string flag so config functions route correctly
+        # setting the mode so we get and write to the right paths
         cfg.THETA_EXP_MODE = mode
             
         run_cross_architecture_tournament(mode, is_mixed=True)

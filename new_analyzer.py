@@ -3,7 +3,6 @@
 import utils.analysis_utils as au
 import utils.data_utils as du
 import utils.model_utils as mu
-import model_interpretability_copy as mi
 import config as cfg
 import os
 from pathlib import Path
@@ -79,103 +78,6 @@ def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
                     cache[base_name][enc][model_label] = None
                     
     return cache
-
-# def plot_disease_variant_multi_model_grid(master_variant_data, enc_sizes, save_dir, baseline_name):
-#     """
-#     Plots Disease Branch Test MSE vs Data Variant.
-#     Rows = Encoding Sizes, Columns = Pipelines (e.g., scaled vs unscaled).
-#     Lines = Different Models.
-#     """
-#     variants = list(master_variant_data.keys())
-#     n_rows = len(enc_sizes)
-    
-#     # Dynamically find the base_names (pipelines) from the first available variant
-#     first_var = next(iter(master_variant_data.values()))
-#     pipelines = list(first_var.keys()) 
-#     n_cols = len(pipelines)
-
-#     fig, axes = plt.subplots(n_rows, n_cols, figsize=(7 * n_cols, 4 * n_rows), squeeze=False)
-#     fig.suptitle(f"Disease Branch Reconstruction Across Data Variants\n(Baseline: {baseline_name})", 
-#                  fontsize=18, fontweight='bold', y=1.02)
-    
-#     style_map = {
-#         'basic': {'color': '#1f77b4', 'marker': 'o'},
-#         'layered': {'color': '#2ca02c', 'marker': 's'},
-#         'pca': {'color': '#EC7063', 'marker': '^'}
-#     }
-#     fallback_colors = ['#9467bd', '#8c564b', '#e377c2']
-
-#     for row_idx, enc in enumerate(enc_sizes):
-#         for col_idx, base_name in enumerate(pipelines):
-#             ax = axes[row_idx, col_idx]
-            
-#             # Gather all model labels present across all variants for this pipeline
-#             all_models = set()
-#             for var_dict in master_variant_data.values():
-#                 if base_name in var_dict:
-#                     all_models.update(var_dict[base_name].keys())
-            
-#             color_idx = 0
-#             for model_label in all_models:
-#                 y_values = []
-#                 valid_x = []
-                
-#                 for v_idx, var_name in enumerate(variants):
-#                     # Safely dig down into the nested dictionary
-#                     try:
-#                         mse_val = master_variant_data[var_name][base_name][model_label][enc]
-#                         y_values.append(mse_val)
-#                         valid_x.append(v_idx)
-#                     except KeyError:
-#                         continue # This model/enc wasn't calculated for this variant
-                
-#                 if y_values:
-#                     # Get Style
-#                     match_key = next((k for k in style_map.keys() if k.lower() in model_label.lower()), None)
-#                     if match_key:
-#                         style = style_map[match_key]
-#                     else:
-#                         style = {'color': fallback_colors[color_idx % len(fallback_colors)], 'marker': 'd'}
-#                         color_idx += 1
-
-#                     # Plot Line
-#                     ax.plot(valid_x, y_values, label=model_label, 
-#                             color=style['color'], marker=style['marker'], 
-#                             linewidth=2.5, markersize=8)
-                    
-#                     # Annotate values (staggered slightly to avoid overlap)
-#                     for i, (x_val, y_val) in enumerate(zip(valid_x, y_values)):
-#                         y_offset = 10 + ((i % 2) * 12) # Alternate heights
-#                         ax.annotate(f'{y_val:.4g}', (x_val, y_val), textcoords="offset points", 
-#                                     xytext=(0, y_offset), ha='center', fontsize=9, 
-#                                     fontweight='bold', color=style['color'])
-
-#             # Formatting
-#             if row_idx == 0:
-#                 ax.set_title(f"Pipeline: {base_name.upper()}", fontsize=14, pad=15)
-#             if col_idx == 0:
-#                 ax.set_ylabel(f"Disease MSE\n(Enc: {enc})", fontsize=13, fontweight='bold')
-            
-#             ax.set_xticks(range(len(variants)))
-#             if row_idx == n_rows - 1:
-#                 ax.set_xticklabels(variants, rotation=15, fontsize=11)
-#             else:
-#                 ax.set_xticklabels([])
-                
-#             ax.grid(True, linestyle='--', alpha=0.5)
-#             ax.legend(loc='best', fontsize=10)
-            
-#             # Headroom
-#             curr_ylim = ax.get_ylim()
-#             y_range = curr_ylim[1] - curr_ylim[0] if curr_ylim[1] != curr_ylim[0] else 1
-#             ax.set_ylim(curr_ylim[0] - (y_range * 0.05), curr_ylim[1] + (y_range * 0.35))
-
-#     plt.tight_layout()
-#     os.makedirs(save_dir, exist_ok=True)
-#     file_path = save_dir / f"disease_branch_variant_comparison_{baseline_name}.png"
-#     plt.savefig(file_path, bbox_inches="tight", dpi=150)
-#     plt.close()
-#     print(f"✅ Saved Disease Variant Grid Plot to: {file_path}")
 
 def calculate_disease_branch_mse(labels_dict, inference_cache, test_df_full, true_disease_input, scaler, scale_bool):
     """
