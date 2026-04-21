@@ -23,8 +23,9 @@ cancer-signal-decomposition/
 │   ├── real/                   # Real cfChIP-seq datasets
 │   │   ├── real_[variant]/     # Processed run folders for specific real variants (e.g., 'basic')
 │   │   └── *.csv               # Raw real data files located in the main directory
-│   └── synthetic_[type]/       # Complexity levels (e.g., 'synthetic_complex')
-│       └── [variant_name]/     # Variant-specific folders (e.g., 'dif_dp', 'theta_0.1')
+│   └── synthetic/              # Synthetically generated mixed datasets
+│       └── synthetic_[type]/   # Complexity levels (e.g., 'synthetic_complex')
+│           └── [variant_name]/ # Variant-specific folders (e.g., 'dif_dp', 'theta_0.1')
 ├── outputs/
 │   ├── disease_mix_all/        # Phase 2 outputs (Mix model weights, histories, meta)
 │   ├── healthy/                # Phase 1 outputs (Baseline weights, histories, meta)
@@ -79,12 +80,16 @@ HIDDEN LAYERS: Size of hidden layers is 512, 64 to match smaller encoding size.
 
 ## Core Workflow
 The pipeline is completely modular. You can run the entire process end-to-end, or run individual phases independently as long as the previous phase's outputs exist in the /outputs folder.
+
+### 0. Create Synthetic Data:
+Run `python3 data/*` file of choice to create data. Ensure you have under data/real the original files to extract data from.
+
 ### 1. Phase 1: Healthy Tournament
 
 Run `python3 train_healthy.py` 
 What it does: 
 -Trains PCA and Autoencoder baselines on purely healthy cfChIP-seq profiles. 
--Saves weights and history.json to the /outputs/healthy directory, as well as train/eval values.
+-Saves weights and history.json to the /outputs/variant healthy directory, as well as train/eval values.
 This builds a reference library of healthy signals across various encoding sizes, as chosen in config.py file.
 
 

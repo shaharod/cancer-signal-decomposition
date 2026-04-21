@@ -8,7 +8,7 @@ DATA_PATH = PROJECT_ROOT / 'data'
 ## --------------- EXPERIMENT CONTROLS ----------------- ##
 
 # Choose Data Source: 'real' or 'synthetic'
-DATA_SOURCE = 'real'  
+DATA_SOURCE = 'synthetic'  
 
 # Choose Complexity (Only applies if DATA_SOURCE is 'synthetic'): 'simple' or 'complex'
 SYNTHETIC_TYPE = 'complex' 
@@ -16,7 +16,7 @@ SYNTHETIC_TYPE = 'complex'
 # Choose Variant. 
 # Synthetic Options: 'dif_dp', 'dif_hp', 'theta_0.1', 'theta_0.01', 'theta_0.001', 'theta_0.005', 'theta_lim_0.7', 'theta_no_lim'
 # Real Options: 'basic', 'gene_reduc'
-VARIANT = 'basic' 
+VARIANT = 'theta_0.01' 
 
 # Choose Theta Mode: 'true', 'fixed', 'random'
 THETA_EXP_MODE = 'true' 
