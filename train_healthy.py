@@ -58,8 +58,8 @@ def train_all_healthy():
                 io.save_checkpoint(best_info['best_state'], path)
                 io.save_results(history, path, "history.json")
 
-                meta['test_mse'] = test_mse
                 meta = {k: v for k, v in best_info.items() if k != 'best_state'}
+                meta['test_mse'] = test_mse
                 io.save_results(meta, path, "best_meta.json")
 
 
