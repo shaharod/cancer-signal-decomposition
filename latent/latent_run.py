@@ -36,13 +36,12 @@ project_root = current_file.parents[1]
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-import config as cfg
-import utils.data_utils as du
+import config as cfg  # noqa: E402
+import utils.data_utils as du  # noqa: E402
 
 # --- Import our new Architecture Layers ---
-import utils.inference_utils as iu
-import utils.plots_utils as pu
-import latent_utils as lu
+import utils.inference_utils as iu  # noqa: E402
+import latent_utils as lu  # noqa: E402
 
 def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     """
@@ -59,7 +58,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
     for scale in cfg.SCALING_OPTIONS:
         tag = "scaled" if scale else "unscaled"
         
-        train_t, test_t, scaler, info = du.load_and_prep_tensors(phase, mode, scale, is_mixed)
+        train_t, val_t, test_t, scaler, info = du.load_and_prep_tensors(phase, mode, scale, is_mixed)
         test_df = info["test_df_full"]
         
         # Extract Latents
@@ -83,7 +82,7 @@ def run_comprehensive_latent_analysis(phase, is_mixed, mode):
         if 'disease_type' in test_df.columns:
             visualization_targets.append('disease_type')
         
-        color_df = test_df[visualization_targets]
+        # color_df = test_df[visualization_targets]
         
         # Batch Process & Save Visuals (Raw coords + Individual plots) via Inference Utils
         iu.save_latent_batch(latents, phase, scale, methods=["pca", "umap"], is_mixed=is_mixed)

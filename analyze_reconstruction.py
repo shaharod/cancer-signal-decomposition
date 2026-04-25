@@ -2,17 +2,13 @@ import traceback
 import torch
 import config as cfg
 
-import utils.analysis_utils as au
 import utils.data_utils as du
 import utils.inference_utils as iu
 import utils.metrics_utils as mu
 import utils.plots_biology_utils as pbu
-import utils.metrics_utils as mu
 import utils.plots_utils as pu
 
 import matplotlib.pyplot as plt
-import torch
-import numpy as np
 
 SCALED, MIXED = True, True
 UNSCALED, NOT_MIXED = False, False
@@ -175,7 +171,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     test_df_full = test_df_full[keep_mask]
     true_disease = true_disease.drop(index=bad_samples, errors='ignore')
 
-    test_t = test_t[torch.tensor(keep_mask)]
+    test_t = test_t[torch.tensor(keep_mask.values)]
     gene_size = test_t.shape[1] - 1
     print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_t.shape[0]}")
     # ==========================================

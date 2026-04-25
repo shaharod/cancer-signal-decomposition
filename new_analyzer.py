@@ -725,7 +725,7 @@ def aggregate_and_plot_disease_branch_variants(variants_dict, labels_dict, basel
                 # Load Core Data specific to THIS pipeline's scaling needs
                 _, true_disease = du.load_reconstruction_data('disease', mode) 
                 
-                train_t, test_t, scaler, info = du.load_and_prep_tensors(
+                train_t, val_t, test_t, scaler, info = du.load_and_prep_tensors(
                     phase="disease", mode=mode, scale_bool=scale_bool, is_mixed=is_mixed
                 )
                 

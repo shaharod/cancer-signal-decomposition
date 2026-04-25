@@ -1,11 +1,8 @@
 import config as cfg
 import utils.analysis_utils as au
 import utils.plots_utils as pu
-import torch
 import numpy as np
-import matplotlib.pyplot as plt
 
-import pandas as pd
 
 SCALED = True
 UNSCALED = False
@@ -27,34 +24,6 @@ def collect_phase_data(phase, model_labels, is_mixed):
         data_u[label] = au.load_data_for_analysis(UNSCALED, model_tag, phase, is_mixed)
 
     return data_s, data_u
-
-def print_data(data_s, data_u):
-    """
-    Prints a summary of the loaded data structure for both Scaled and Unscaled sets.
-    debug function
-    """
-    datasets = {"SCALED": data_s, "UNSCALED": data_u}
-    
-    for label, ds in datasets.items():
-        print(f"\n{'='*20} {label} DATA {'='*20}")
-        
-        for model_name, model_tuple in ds.items():
-            # Unpacking based on analysis_utils structure
-            train_dict = model_tuple[au.TRAIN_LOSS_IDX]
-            eval_dict  = model_tuple[au.EVAL_LOSS_IDX]
-            mse_dict   = model_tuple[au.TEST_MSE_IDX]
-            
-            print(f"\nModel: {model_name}")
-            
-            # Since all dicts share the same encoding keys
-            for enc in train_dict.keys():
-                # Get lengths or values for a quick overview
-                t_len = len(train_dict[enc])
-                e_len = len(eval_dict[enc])
-                # Test MSE is usually a single-item list
-                mse_val = mse_dict[enc][0] if isinstance(mse_dict[enc], list) else mse_dict[enc]
-                
-                print(f"  [Enc {enc:3}]: Train Pts: {t_len:4} | Eval Pts: {e_len:4} | Test MSE: {mse_val:.6f}")
 
 
 def analyze_disease_mix(is_mixed, phase='disease'):
@@ -168,7 +137,7 @@ if __name__ == '__main__':
     analyze_healthy_model()
     
     for mode in ["true"]: #, "fixed"]:
-        print(f"\n" + "="*40)
+        print("\n" + "="*40)
         print(f">>> STARTING EXPERIMENT: {mode.upper()}")
         print("="*40)
         

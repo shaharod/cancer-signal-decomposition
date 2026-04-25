@@ -82,7 +82,7 @@ def fit_and_scale(train_df, val_df, test_df, phase, is_mixed=False, theta=""):
 def inverse_scale(scaler, tensor):
     """Converts a tensor back to original units."""
 
-    if scaler is None: return tensor
+    if scaler is None: return tensor  # noqa: E701
     print('############### IM HERE TO INVERSE SCALE ###############')
     array = tensor.detach().cpu().numpy()
     unscaled = scaler.inverse_transform(array)
@@ -207,7 +207,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
     print(f"\n📂 [DEBUG] Checking Split Path: {split_path}")
     print(f"   -> DataFrame shape arriving at split: {df.shape}")
     if split_path and os.path.exists(split_path):
-        print(f"   -> NOTE: Found an existing split file at this path!")
+        print("   -> NOTE: Found an existing split file at this path!")
         with open(split_path, "r") as f:
             splits = json.load(f)
 

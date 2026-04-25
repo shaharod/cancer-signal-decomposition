@@ -3,7 +3,6 @@ from core.models.model_factory import ModelFactory
 from core.engine import Trainer
 from core.trainer_utils import ExperimentIO as io
 from utils import data_utils, pca_utils
-import os
 
 def train_all_healthy():
     print(">>> PHASE 1: BUILDING HEALTHY MODEL LIBRARY")

@@ -60,7 +60,7 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                 train_curve = data_dict[model_key][0].get(enc, [])
                 eval_curve = data_dict[model_key][1].get(enc, [])
                 
-                if not train_curve: continue
+                if not train_curve: continue  # noqa: E701
                 
                 # Setup X-axis
                 epochs = np.arange(1, len(train_curve) + 1)
@@ -69,7 +69,7 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                 style = style_map.get(model_key, {'color': 'gray', 'marker': 'x', 'label': model_key})
 
                 # current_model = style_map.get(model_key, color_map['default'])                
-                ax.plot(epochs, train_curve, label=f"Train", color=style['color'], linestyle='-', lw=1.5)
+                ax.plot(epochs, train_curve, label="Train", color=style['color'], linestyle='-', lw=1.5)
                 if len(eval_curve) > 0:
                     # Calculate how often we validated (e.g., 300 / 60 = 5)
                     epoch_jump = len(train_curve) // len(eval_curve)
@@ -102,6 +102,20 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                     if last_n > 0:
                         start_x = max(0, len(train_curve) - last_n)
                         ax.set_xlim(start_x, len(train_curve))
+
+                        if y_max is None:
+                            zoomed_train = train_curve[start_x:]
+                            
+                            # 2. Grab only the eval data in the zoomed window
+                            # (Convert start_x to eval_epochs index by dividing by the jump)
+                            eval_start_idx = start_x // epoch_jump if 'epoch_jump' in locals() else 0
+                            zoomed_eval = eval_curve[eval_start_idx:] if len(eval_curve) > 0 else [0]
+                            
+                            # 3. Find the highest value in that specific window and add 10% padding
+                            local_max = max(max(zoomed_train), max(zoomed_eval))
+                            
+                            # Ignore massive outlier spikes in PCA baseline if it's way off the chart
+                            y_max = local_max * 1.1
                     
                     if y_max is not None:
                         ax.set_ylim(0, y_max)
@@ -109,6 +123,7 @@ def plot_train_eval_curves(data_s, data_u, save_name, folder_path,
                 # Formatting
                 ax.set_title(f"{title} | Enc: {enc}")
                 ax.set_ylabel("MSE")
+                ax.set_xlabel("Epochs")
                 ax.grid(True, which='both', linestyle=':', alpha=0.5)
                 ax.legend(loc='upper right', fontsize='x-small')
 
@@ -207,7 +222,7 @@ def plot_comprehensive_comparison_bars(data_s, data_u, encoding_sizes, title, sa
             # Extract MSE values from the dictionary structure
             vals = []
             for k in model_keys:
-                mse_dict = data_dict[k][2] # Index 2 is TEST_MSE_IDX
+                mse_dict = data_dict[k][au.TEST_MSE_IDX]
                 val = mse_dict.get(enc, [0])
                 # Flatten to get the raw float
                 vals.append(float(np.array(val).flatten()[0]))
@@ -476,32 +491,7 @@ def _plot_evaluation_scatter(ax, flat_input, flat_recon, flat_labels, color_map,
     ax.set_xlim(right=1500)
     ax.set_ylim(top=1500)
 
-def _annotate_outliers1(ax, flat_input, flat_recon, gene_names, gene_size, threshold=1500, max_annotations=30):
-    """Finds and annotates highly expressed genes on the scatter plots."""
-    over_thresh_indices = np.where((flat_recon > threshold) | (flat_input > threshold))[0]
-    
-    # Quick exit if nothing is over the threshold
-    if len(over_thresh_indices) == 0:
-        return
-
-    # Print to console
-    unique_genes = set(gene_names[idx % gene_size] for idx in over_thresh_indices)
-    print(f"Genes reconstructed > {threshold}: {list(unique_genes)}. Num is {len(unique_genes)}")
-
-    # Annotate plot
-    for i, flat_idx in enumerate(over_thresh_indices):
-        if i >= max_annotations:
-            print(f"  ... and {len(over_thresh_indices) - max_annotations} more points truncated.")
-            break
-            
-        x_val = flat_input[flat_idx]
-        y_val = flat_recon[flat_idx]
-        gene_name = gene_names[flat_idx % gene_size]
-        
-        ax.annotate(gene_name, (x_val, y_val), 
-                    xytext=(5, 5), textcoords='offset points',
-                    fontsize=8, color='black', alpha=0.7)
-        
+      
 def _annotate_outliers(ax, flat_input, flat_recon, gene_names, sample_names, gene_size, threshold):
     """Annotates points where the residual error exceeds the threshold with Sample & Gene."""
     # Calculate absolute error
@@ -538,8 +528,6 @@ def _annotate_outliers(ax, flat_input, flat_recon, gene_names, sample_names, gen
             color="#c0392b", # A nice subtle red for outliers
             arrowprops=dict(arrowstyle="->", color='gray', lw=0.5, alpha=0.7)
         )
-import pandas as pd
-import numpy as np
 
 def print_top_outliers(truth_2d, recon_2d, sample_names, gene_names, threshold=1500, top_n=20):
     """Instantly finds and prints the biggest reconstruction errors."""

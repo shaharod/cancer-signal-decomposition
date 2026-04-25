@@ -20,15 +20,16 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy", is_mixed=Fals
         if model_tag == "pca" or model_tag == "mix_H-pca_D-pca":
             res = io.load_results(path, "results.json")
             if res:
-                t_mse = res.get("train_mse", 0)
-                v_mse = res.get("val_mse", 0)
+                train_val = res.get("train_mse", 0)
+                val_val = res.get("val_mse", 0)
+                test_val = res.get("test_mse", 0)
 
                 # storing values
-                train_loss[enc] = [t_mse] 
+                train_loss[enc] = [train_val] 
 
                 # same for both, pca is calculated once
-                eval_loss[enc] = [v_mse]
-                test_mse[enc] = [v_mse]
+                eval_loss[enc] = [val_val]
+                test_mse[enc] = [test_val]
                 
             continue
             
@@ -38,14 +39,15 @@ def load_data_for_analysis(scale_bool, model_tag, phase="healthy", is_mixed=Fals
         if history:
             train_loss[enc] = history.get("train", [])
             eval_loss[enc] = history.get("val", [])
+            # test_[enc] = history.get("test", [])
         
         if meta:
-            val = meta.get('best_val', None)
-            test_mse[enc] = [val]
+            test_val = meta.get('test_mse', None)
+            test_mse[enc] = [test_val]
             # test_mse.append(meta.get("best_val", 0))
         else:
             # fallback - take last value from validation losses
-            test_mse[enc] = eval_loss[enc][-1] if eval_loss.get(enc) else 0
+            test_mse[enc] = [eval_loss[enc][-1] if eval_loss.get(enc) else 0]
             # test_mse.append(eval_loss[enc][-1] if eval_loss.get(enc) else 0)
 
 

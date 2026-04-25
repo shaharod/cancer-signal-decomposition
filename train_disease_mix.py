@@ -46,7 +46,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             )
 
         input_dim = train_d.shape[1] - 1 
-        numpy_array = train_d.detach().cpu().numpy()
+        train_d.detach().cpu().numpy()
 
         # --- AUDIT PRINT ---
         print(f"Tensor Shape: {train_d.shape}") # Should be (Samples, 20007)
@@ -93,7 +93,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 bench_trainer = Trainer(full_pca_mix, scaler=scaler, device=cfg.DEVICE)
                 pca_bench_val_mse = bench_trainer.get_mse(val_d)
                 pca_bench_train_mse = bench_trainer.get_mse(train_d) 
-                pca_bench_test_mse = bench_trainer.get_mse(test_mse)
+                pca_bench_test_mse = bench_trainer.get_mse(test_d)
                 out_dir = cfg.get_path("disease", tag, "mix_H-pca_D-pca", enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
                 pca_d_path = out_dir / "model.joblib"
                 joblib.dump(pca_d_obj, pca_d_path) #
@@ -129,7 +129,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             for d_arch in cfg.MODEL_TYPES:
                 for h_name, h_obj in healthy_library:
                     ## NOTE: currently running only with pca as healthy
-                    if h_name != "pca" and h_name != "PCA": continue
+                    if h_name != "pca" and h_name != "PCA": continue  # noqa: E701
                     label = f"mix_H-{h_name}_D-{d_arch}"
 
                     print(f"Testing: {label} | {tag} | Enc: {enc}")
@@ -153,7 +153,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
 
 if __name__ == "__main__":
     for mode in ["true"]:
-        print(f"\n" + "="*40)
+        print("\n" + "="*40)
         print(f">>> STARTING EXPERIMENT: {mode.upper()}")
         print("="*40)
         
