@@ -24,17 +24,18 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
             df_combined = pd.concat([df_healthy, df_disease]) #.sample(frac=1, random_state=42)
             df_combined['disease_type'] = df_combined['disease_type'].fillna(0)
 
-            train_df, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
+            train_df, val_d, test_df = data_utils.get_split_data(df_combined, split_path=cfg.get_split_path("disease", tag, is_mixed=is_mixed)) #TODO need to make sure when running real data we delete the splits that was there before, it is wrong
             
-            train_t, test_t, scaler = data_utils.get_ready_tensors_df(train_df, test_df, scale, phase="disease", is_mixed=is_mixed, theta=mode_val)
+            train_t, val_t, test_t, scaler = data_utils.get_ready_tensors_df(train_df, test_df, scale, phase="disease", is_mixed=is_mixed, theta=mode_val)
             # raise ValueError(f"train is {train_t.shape} and test is {test_t.shape}")
 
             # Move disease tensors to GPU
             train_d = train_t.to(cfg.DEVICE)
+            val_d = val_t.to(cfg.DEVICE)
             test_d = test_t.to(cfg.DEVICE)
         else:
             ############ USE ONLY DISEASE SAMPLES ##############
-            train_d, test_d, scaler = data_utils.get_ready_tensors(
+            train_d, val_d, test_d, scaler = data_utils.get_ready_tensors(
                 disease_gene_path,
                 split_path=cfg.get_split_path("disease", tag, is_mixed), use_scaling=scale,
                 theta_path=cfg.get_theta_path(mode_val),
@@ -90,14 +91,14 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 
                 full_pca_mix = ModelFactory.create_mix_model(pca_h_obj, pca_d_obj)
                 bench_trainer = Trainer(full_pca_mix, scaler=scaler, device=cfg.DEVICE)
-                pca_bench_val_mse = bench_trainer.get_mse(test_d)
+                pca_bench_val_mse = bench_trainer.get_mse(val_d)
                 pca_bench_train_mse = bench_trainer.get_mse(train_d) 
-                
+                pca_bench_test_mse = bench_trainer.get_mse(test_mse)
                 out_dir = cfg.get_path("disease", tag, "mix_H-pca_D-pca", enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
                 pca_d_path = out_dir / "model.joblib"
                 joblib.dump(pca_d_obj, pca_d_path) #
                 io.save_results(
-                    {"val_mse": pca_bench_val_mse, "train_mse": pca_bench_train_mse},
+                    {"val_mse": pca_bench_val_mse, "train_mse": pca_bench_train_mse, "test_mse":pca_bench_test_mse},
                     out_dir, "results.json"
                     )
             # TOURNAMENT: Healthy AE + Disease PCA
@@ -112,7 +113,7 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                 
             #     # Evaluate
             #     bench_trainer = Trainer(mix_model, scaler=scaler, device=cfg.DEVICE)
-            #     val_mse = bench_trainer.get_mse(test_d)
+            #     val_mse = bench_trainer.get_mse(val_d)
             #     train_mse = bench_trainer.get_mse(train_d)
                 
             #     # Save folder
@@ -137,12 +138,16 @@ def run_cross_architecture_tournament(mode_val, is_mixed):
                     mix_model = ModelFactory.create_mix_model(h_obj, disease_model)
                     
                     trainer = Trainer(mix_model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)
-                    history, best_info = trainer.fit(train_d, test_d, epochs=cfg.EPOCHS_NUM)
-                    
+                    history, best_info = trainer.fit(train_d, val_d, epochs=cfg.EPOCHS_NUM)
+                    #### adding logic to calculate test mse now to save time later for plotting ###
+                    mix_model.load_state_dict(best_info['best_state'])
+                    test_mse = trainer.get_mse(test_d)
+
                     out_dir = cfg.get_path("disease", tag, label, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
                     io.save_checkpoint(best_info['best_state'], out_dir)
                     io.save_results(history, out_dir, "history.json")
-                    
+
+                    meta['test_mse'] = test_mse
                     meta = {k:v for k,v in best_info.items() if k!='best_state'}
                     io.save_results(meta, out_dir, "best_meta.json")
 

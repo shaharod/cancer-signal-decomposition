@@ -161,7 +161,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
 
     _, true_disease = du.load_reconstruction_data('disease', mode) 
    
-    train_t, test_t, scaler, info = du.load_and_prep_tensors(
+    train_t, val_t, test_t, scaler, info = du.load_and_prep_tensors(
     phase="disease", mode=mode, scale_bool=scale_bool, is_mixed=is_mixed
     )
     test_df_full = info['test_df_full'].fillna(value=0.0)      # Contains [Genes | Theta | Type]

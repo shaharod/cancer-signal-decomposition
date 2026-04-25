@@ -38,7 +38,7 @@ def get_scaler_path(phase, is_mixed=False, theta=""):
     return path
 
 
-def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
+def fit_and_scale(train_df, val_df, test_df, phase, is_mixed=False, theta=""):
     """
     Smarter Scaling: Anchors the scaler to the phase root to ensure 
     consistency across different theta-experiments.
@@ -47,6 +47,7 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
     cols_to_drop = [col for col in train_df.columns if 'theta' in col]
     # We must drop theta so the scaler doesn't treat it as a gene feature
     train_genes = train_df.drop(columns=cols_to_drop)
+    val_genes = val_df.drop(columns=cols_to_drop)
     test_genes = test_df.drop(columns=cols_to_drop)
     
     scaler = None
@@ -68,10 +69,12 @@ def fit_and_scale(train_df, test_df, phase, is_mixed=False, theta=""):
 
     # Transform data
     train_scaled = scaler.transform(train_genes)
+    val_scaled = scaler.transform(val_genes)
     test_scaled = scaler.transform(test_genes)
     
     return (
         torch.tensor(train_scaled, dtype=torch.float32),
+        torch.tensor(val_scaled, dtype=torch.float32),
         torch.tensor(test_scaled, dtype=torch.float32),
         scaler
     )
@@ -93,12 +96,13 @@ def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
     patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
     return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
 
-def get_theta_cols(train_df, test_df):
+def get_theta_cols(train_df, val_df, test_df):
     theta_cols = [col for col in train_df.columns if 'theta' in col]
     # Separate genes from theta
     train_theta = torch.tensor(train_df[theta_cols].values, dtype=torch.float32)
+    val_theta = torch.tensor(val_df[theta_cols].values, dtype=torch.float32)
     test_theta = torch.tensor(test_df[theta_cols].values, dtype=torch.float32)
-    return train_theta, test_theta
+    return train_theta, val_theta, test_theta
 
 def prepare_and_align_data(gene_path, theta_path=None, mode="true"):
     """
@@ -162,35 +166,39 @@ def load_and_prep_tensors(phase, mode, scale_bool, is_mixed):
     df_target = df_target.fillna(0.0)
     # 2. Handle Splits
     split_path = cfg.get_split_path(phase=phase, scale_tag=tag, is_mixed=is_mixed)
-    train_df, test_df = get_split_data(df_target, split_path=split_path)
+    train_df, val_df, test_df = get_split_data(df_target, split_path=split_path)
     info_dict = {
-        'test_df_full': test_df.copy(), # Keep everything (genes, theta, type)
-        'train_df_full': train_df.copy()
+        'train_df_full': train_df.copy(),
+        'val_df_full':val_df.copy(),
+        'test_df_full': test_df.copy() # Keep everything (genes, theta, type)
     }
     # 3. Clean Metadata (Drop disease_type but KEEP theta_value)
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    val_df = val_df.drop(columns=['disease_type'], errors='ignore')
     test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
     # 4. Handle Scaling & Tensorization
     if not scale_bool:
         # Straight to tensors
         train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        val_t = torch.tensor(val_df.values, dtype=torch.float32)
         test_t = torch.tensor(test_df.values, dtype=torch.float32)
-        return train_t, test_t, None, info_dict
+        return train_t, val_t, test_t, None, info_dict
 
     # Separate genes from theta for scaling
-    train_theta, test_theta = get_theta_cols(train_df, test_df)
+    train_theta, val_theta, test_theta = get_theta_cols(train_df, val_df, test_df)
     
     # Scale only the genes via the smart fit_and_scale
-    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(
-        train_df, test_df, phase, is_mixed, mode
+    train_genes_scaled, val_genes_scaled, test_genes_scaled, scaler = fit_and_scale(
+        train_df, val_df, test_df, phase, is_mixed, mode
     )
     
     # 5. Recombine [Genes | Theta]
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    val_tensor = torch.cat([val_genes_scaled, val_theta], dim=1)
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
     
-    return train_tensor, test_tensor, scaler, info_dict
+    return train_tensor, val_tensor, test_tensor, scaler, info_dict
 
 def get_split_data(df, split_path, test_size=0.2, seed=42):
     """
@@ -204,7 +212,7 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
             splits = json.load(f)
 
         print(f"--> Loaded split from {split_path}")
-        return df.loc[splits["train_ids"]], df.loc[splits["test_ids"]]
+        return df.loc[splits["train_ids"]], df.loc[splits["val_ids"]], df.loc[splits["test_ids"]]
     
     if 'disease_type' in df.columns:
         # like "healthy", "cancer_A", "cancer_B". we have in numbers 0 1 2
@@ -214,31 +222,40 @@ def get_split_data(df, split_path, test_size=0.2, seed=42):
         strat_labels = (df['theta_value'] > 0).astype(int)
 
     # New Split
-    train_ids, test_ids = train_test_split(
+    train_ids, tmp_ids = train_test_split(
         df.index.tolist(),
         test_size=test_size,
         random_state=seed,
         stratify=strat_labels
     )
+
+    val_ids, test_ids = train_test_split(
+        tmp_ids, 
+        test_size=0.5, 
+        random_state=seed,
+        stratify=strat_labels.loc[tmp_ids]
+    )
+    
     
     # Save for future runs
     if split_path:
         os.makedirs(os.path.dirname(split_path), exist_ok=True)
         with open(split_path, "w") as f:
-            json.dump({"train_ids": train_ids, "test_ids": test_ids}, f, indent=2)
+            json.dump({"train_ids": train_ids, "val_ids": val_ids, "test_ids": test_ids}, f, indent=2)
         print(f"--> Saved split to {split_path}")
         
     train_df = df.loc[train_ids]
+    val_df = df.loc[val_ids]
     test_df = df.loc[test_ids]
     # Validation Print
     print("\n--- [Data Split Audit] ---")
-    for name, df_s in [("Train", train_df), ("Test", test_df)]:
+    for name, df_s in [("Train", train_df),  ("Validation", val_df), ("Test", test_df)]:
         h_count = (df_s['theta_value'] == 0).sum()
         d_count = (df_s['theta_value'] > 0).sum()
-        print(f"{name} Set: {h_count} Healthy, {d_count} Disease (Ratio: {d_count/len(df):.2%})")
+        print(f"{name} Set: {h_count} Healthy, {d_count} Disease (Ratio: {d_count/len(df_s):.2%})")
 
 
-    return df.loc[train_ids], df.loc[test_ids]
+    return df.loc[train_ids], df.loc[val_ids], df.loc[test_ids]
 
 
 def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=None, mode="true", phase="healthy", is_mixed=False, theta=""):
@@ -249,53 +266,59 @@ def get_ready_tensors(gene_path, split_path=None, use_scaling=None, theta_path=N
     """
 
     df_full = prepare_and_align_data(gene_path, theta_path, mode=mode)
-    train_df, test_df = get_split_data(df_full, split_path)
+    train_df, val_df, test_df = get_split_data(df_full, split_path)
     # update_sample_metadata(cfg.LOG_PATH, gene_path, train_df, test_df, mode)
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    val_df = val_df.drop(columns=['disease_type'], errors='ignore')
     test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
     if not use_scaling:
         # We must use .values and specify dtype to create a valid PyTorch Tensor
         train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        val_t = torch.tensor(val_df.values, dtype=torch.float32)
         test_t = torch.tensor(test_df.values, dtype=torch.float32)
-        return train_t, test_t, None
+        return train_t, val_t, test_t, None
     
     # Separate genes from theta
-    train_theta, test_theta = get_theta_cols(train_df, test_df)
+    train_theta, val_theta, test_theta = get_theta_cols(train_df, val_df, test_df)
 
     
     # Scale only the genes
-    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
+    train_genes_scaled, val_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, val_df, test_df, phase, is_mixed, theta)
     
     # Combine back to [Genes | Theta]
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    val_tensor = torch.cat([val_genes_scaled, val_theta], dim=1)
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
-    return train_tensor, test_tensor, scaler
+    return train_tensor, val_tensor, test_tensor, scaler
     
-def get_ready_tensors_df(train_df, test_df, use_scaling=None, phase="disease", is_mixed=False, theta=""):
+def get_ready_tensors_df(train_df, val_df, test_df, use_scaling=None, phase="disease", is_mixed=False, theta=""):
     """
     function used when we had to fix df data beforehand (like when combining the healthy and disease)
     so we just pass the df without needing to load them
     """
     train_df = train_df.drop(columns=['disease_type'], errors='ignore')
+    val_df = val_df.drop(columns=['disease_type'], errors='ignore')
     test_df = test_df.drop(columns=['disease_type'], errors='ignore')
 
     if not use_scaling:
         # We must use .values and specify dtype to create a valid PyTorch Tensor
         train_t = torch.tensor(train_df.values, dtype=torch.float32)
+        val_t = torch.tensor(val_df.values, dtype=torch.float32)
         test_t = torch.tensor(test_df.values, dtype=torch.float32)
-        return train_t, test_t, None
+        return train_t, val_t, test_t, None
     
-    train_theta, test_theta = get_theta_cols(train_df, test_df)
+    train_theta, val_theta, test_theta = get_theta_cols(train_df, val_df, test_df)
     
     
     # Scale only the genes
-    train_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, test_df, phase, is_mixed, theta)
+    train_genes_scaled, val_genes_scaled, test_genes_scaled, scaler = fit_and_scale(train_df, val_df, test_df, phase, is_mixed, theta)
     
     # Combine back to [Genes | Theta]
     train_tensor = torch.cat([train_genes_scaled, train_theta], dim=1)
+    val_tensor = torch.cat([val_genes_scaled, val_theta], dim=1)
     test_tensor = torch.cat([test_genes_scaled, test_theta], dim=1)
-    return train_tensor, test_tensor, scaler
+    return train_tensor, val_tensor, test_tensor, scaler
 
 
 

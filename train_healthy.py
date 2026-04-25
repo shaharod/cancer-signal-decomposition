@@ -12,7 +12,7 @@ def train_all_healthy():
         tag = "scaled" if scale else "unscaled"
         
         # prepare data & split
-        train_h, test_h, scaler = data_utils.get_ready_tensors(
+        train_h, val_h, test_h, scaler = data_utils.get_ready_tensors(
             cfg.HEALTHY_GENES_PATH, 
             split_path=cfg.get_split_path("healthy", tag, is_mixed=False),
             use_scaling=scale,
@@ -23,6 +23,7 @@ def train_all_healthy():
         
         # move data to the mac GPU
         train_h = train_h.to(cfg.DEVICE)
+        val_h = val_h.to(cfg.DEVICE)
         test_h = test_h.to(cfg.DEVICE)
 
         # PCA Baselines (train and save)
@@ -31,10 +32,10 @@ def train_all_healthy():
             path = cfg.get_path(phase="healthy", scale_tag=tag, model_type="pca", enc=enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
             pca_utils.save_pca_model(pca_model=mod, folder=path)
             train_mse = pca_utils.get_pca_mse(mod, train_h, scaler)
-            val_mse = pca_utils.get_pca_mse(mod, test_h, scaler)
-
+            val_mse = pca_utils.get_pca_mse(mod, val_h, scaler)
+            test_mse = pca_utils.get_pca_mse(mod, test_h, scaler)
             io.save_results({
-                "train_mse": train_mse,"val_mse": val_mse}, 
+                "train_mse": train_mse,"val_mse": val_mse, "test_mse":test_mse}, 
                 path
                 )
 
@@ -47,46 +48,20 @@ def train_all_healthy():
                 model = ModelFactory.create_model(arch, train_h.shape[1]-1, enc, cfg.H1, cfg.H2, scale).to(cfg.DEVICE)
                 print(model)
                 trainer = Trainer(model, scaler=scaler, lr=cfg.LR, device=cfg.DEVICE)
-                history, best_info = trainer.fit(train_h, test_h, epochs=cfg.EPOCHS_NUM)
+                history, best_info = trainer.fit(train_h, val_h, epochs=cfg.EPOCHS_NUM)
                 
+                #### adding logic to calculate test mse now to save time later for plotting ###
+                model.load_state_dict(best_info['best_state'])
+                test_mse = trainer.get_mse(test_h)
+
                 # Save the "Best State" found during training
                 io.save_checkpoint(best_info['best_state'], path)
                 io.save_results(history, path, "history.json")
+
+                meta['test_mse'] = test_mse
                 meta = {k: v for k, v in best_info.items() if k != 'best_state'}
                 io.save_results(meta, path, "best_meta.json")
 
-def fix_missing_meta():
-    print(">>> Retroactively creating best_meta.json files...")
-    
-    # We only need to fix the Autoencoders (PCA is already handled by results.json)
-    for scale in cfg.SCALING_OPTIONS:
-        tag = "scaled" if scale else "unscaled"
-        
-        for arch in cfg.MODEL_TYPES:
-            for enc in cfg.ENCODING_SIZES:
-                path = cfg.get_path("healthy", tag, arch, enc, folder_type=cfg.MODELS_SUBFOLDER, is_mixed=False)
-                history_path = os.path.join(path, "history.json")
-                meta_path = os.path.join(path, "best_meta.json")
-
-                # If history exists but meta doesn't
-                if os.path.exists(history_path) and not os.path.exists(meta_path):
-                    history = io.load_results(path, "history.json")
-                    
-                    if history and "val" in history and len(history["val"]) > 0:
-                        val_curve = history["val"]
-                        best_val = min(val_curve)
-                        best_epoch = val_curve.index(best_val) + 1
-                        
-                        # Create the meta dictionary
-                        meta = {
-                            "best_val": best_val,
-                            "best_epoch": best_epoch,
-                            "note": "Retroactively generated from history.json"
-                        }
-                        
-                        # Save it!
-                        io.save_results(meta, path, "best_meta.json")
-                        print(f"Fixed: {arch} | {tag} | Enc {enc} (Best Val: {best_val:.4f})")
 
 if __name__ == "__main__":
     # fix_missing_meta()
