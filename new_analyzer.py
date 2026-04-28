@@ -253,7 +253,7 @@ def plot_disease_variant_multi_model_grid(master_variant_data, enc_sizes, save_d
 
     plt.tight_layout()
     os.makedirs(save_dir, exist_ok=True)
-    file_path = save_dir / f"disease_branch_variant_comparison.png"
+    file_path = save_dir / "disease_branch_variant_comparison.png"
     plt.savefig(file_path, bbox_inches="tight", dpi=150)
     plt.close()
     print(f"✅ Saved Disease Variant Grid Plot to: {file_path}")
@@ -396,7 +396,7 @@ def plot_variant_multi_model_grid(master_data, enc_sizes, model_labels, save_dir
     if phase == 'disease':
         fig.suptitle(f"Model Comparison Across Data Variants\n(Healthy Model Baseline: {baseline_name})", fontsize=18, fontweight='bold', y=1.02)
     elif phase == 'healthy':
-        fig.suptitle(f"Model Comparison Across Data Variants\n(Healthy Model Evaluation)", fontsize=18, fontweight='bold', y=1.02)
+        fig.suptitle("Model Comparison Across Data Variants\n(Healthy Model Evaluation)", fontsize=18, fontweight='bold', y=1.02)
     pipelines = [
         (0, 'scaled', "Pipeline: Scaled Data"),
         (1, 'unscaled', "Pipeline: Raw Data")
@@ -473,7 +473,6 @@ def plot_variant_multi_model_grid(master_data, enc_sizes, model_labels, save_dir
     plt.close()
     print(f"✅ Saved Multi-Model Grid Plot to: {file_path}")
 
-import copy
 
 def aggregate_and_plot_variants(baseline='PCA', target_models=['basic','layered'], phase='disease', 
                                 is_mixed=True, variants={
@@ -490,15 +489,15 @@ def aggregate_and_plot_variants(baseline='PCA', target_models=['basic','layered'
     # model_tag = f"mix_H-{baseline.lower()}_D-ae_{target_model}"
     if phase == 'disease':
         model_labels = {
-            f"Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
-            f"Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
-            f"PCA": f"mix_H-{baseline.lower()}_D-pca"
+            "Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
+            "Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
+            "PCA": f"mix_H-{baseline.lower()}_D-pca"
         }
     elif phase == 'healthy':
         model_labels = {
-            f"Basic AE": "ae_basic",
-            f"Layered AE": "ae_layered",
-            f"PCA":"pca"
+            "Basic AE": "ae_basic",
+            "Layered AE": "ae_layered",
+            "PCA":"pca"
         }
     enc_sizes = cfg.ENCODING_SIZES
 
@@ -561,7 +560,7 @@ def aggregate_and_plot_variants(baseline='PCA', target_models=['basic','layered'
 def plot_per_var_d_mse_bins(results, bin_counts, is_mixed, save_path):
     n_subplots = len(results)
     fig, axes = plt.subplots(1, n_subplots, figsize=(9 * n_subplots, 7), sharey=False)
-    if n_subplots == 1: axes = [axes]
+    if n_subplots == 1: axes = [axes]  # noqa: E701
     
     # Base colors for models
     color_map = {'basic': '#1f77b4', 'layered': '#2ca02c', 'pca': '#EC7063'}
@@ -575,7 +574,7 @@ def plot_per_var_d_mse_bins(results, bin_counts, is_mixed, save_path):
             m_color = next((v for k, v in color_map.items() if k in model_label.lower()), 'gray')
             
             for bin_name, enc_dict in bin_dict.items():
-                if not enc_dict: continue
+                if not enc_dict: continue  # noqa: E701
                 
                 valid_encodings = sorted(list(enc_dict.keys()))
                 y_values = [enc_dict[enc] for enc in valid_encodings]
@@ -608,7 +607,7 @@ def plot_per_var_d_mse_bins(results, bin_counts, is_mixed, save_path):
         curr_ylim = ax.get_ylim()
         ax.set_ylim(curr_ylim[0], curr_ylim[1] * 1.15)
 
-    fig.suptitle(f"Disease MSE by Theta Bins vs Encoding Size", fontsize=18, y=1.05)
+    fig.suptitle("Disease MSE by Theta Bins vs Encoding Size", fontsize=18, y=1.05)
     plt.tight_layout()
     # plt.show()
     out_folder = cfg.get_path("disease", folder_type=cfg.PLOTS_SUBFOLDER, is_mixed=is_mixed) / "MSE_Lines"
@@ -623,7 +622,7 @@ def plot_per_var_d_mse(results, is_mixed, save_path, mode):
     fig, axes = plt.subplots(1, n_subplots, figsize=(7.5 * n_subplots, 6), sharey=False)
     
     # Ensure axes is iterable even if there's only 1 subplot
-    if n_subplots == 1: axes = [axes]
+    if n_subplots == 1: axes = [axes]  # noqa: E701
     
     # Style map to keep lines consistent across subplots
     style_map = {
@@ -640,7 +639,7 @@ def plot_per_var_d_mse(results, is_mixed, save_path, mode):
         
         for model_label, enc_dict in models_dict.items():
             # Skip if no valid data was calculated for this model
-            if not enc_dict: continue
+            if not enc_dict: continue  # noqa: E701
             
             # Sort encodings just in case
             valid_encodings = sorted(list(enc_dict.keys()))
@@ -796,14 +795,14 @@ def run_aggregation_disease_mse():
     # and adjust the scaling logic automatically.
     labels_dict = {
         'scaled': {
-            f"Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
-            f"Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
-            f"PCA": f"mix_H-{baseline.lower()}_D-pca"
+            "Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
+            "Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
+            "PCA": f"mix_H-{baseline.lower()}_D-pca"
         },
         'unscaled': {
-            f"Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
-            f"Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
-            f"PCA": f"mix_H-{baseline.lower()}_D-pca"
+            "Basic AE": f"mix_H-{baseline.lower()}_D-ae_basic",
+            "Layered AE": f"mix_H-{baseline.lower()}_D-ae_layered",
+            "PCA": f"mix_H-{baseline.lower()}_D-pca"
         }
     }
 

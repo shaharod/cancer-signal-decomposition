@@ -171,7 +171,7 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     test_df_full = test_df_full[keep_mask]
     true_disease = true_disease.drop(index=bad_samples, errors='ignore')
 
-    test_t = test_t[torch.tensor(keep_mask.values)]
+    test_t = test_t[torch.tensor(keep_mask)]
     gene_size = test_t.shape[1] - 1
     print(f"✅ Data Loaded. Genes: {gene_size}, Test Samples: {test_t.shape[0]}")
     # ==========================================

@@ -111,8 +111,8 @@ def analyze_healthy_model(phase='healthy'):
         }
 
     zoom = {
-        'last_n_epochs': 100, 
-        'ylim_top': 100     # Adjust this value based on your typical final MSE
+        'last_n_epochs': 100
+        # ,'ylim_top': 100     # Adjust this value based on your typical final MSE
     }
 
     # getting data and path
@@ -143,6 +143,6 @@ if __name__ == '__main__':
         
         cfg.THETA_EXP_MODE = mode
         
-        analyze_disease_mix(is_mixed=True) #both healthy and disease samples in training
+        # analyze_disease_mix(is_mixed=True) #both healthy and disease samples in training
         # analyze_disease_mix(is_mixed=False) #disease samples only
 

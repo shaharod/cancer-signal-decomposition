@@ -49,15 +49,15 @@ def get_theta_path(mode):
     if not SYNTHETIC_DATA:
         return DATA_SUB / 'theta_values.csv'
     match mode:
-        case 'true': return DATA_SUB / "theta_values.csv"
-        case 'fixed': return DATA_SUB / "theta_values05.csv"
-        case _: raise ValueError(f"Unknown mode: {mode}")
+        case 'true': return DATA_SUB / "theta_values.csv"  # noqa: E701
+        case 'fixed': return DATA_SUB / "theta_values05.csv"  # noqa: E701
+        case _: raise ValueError(f"Unknown mode: {mode}")  # noqa: E701
 
 def get_disease_gene_path(mode_val):
     if mode_val == "true":
         return DATA_SUB / ("disease_data_uniform_theta.csv" if SYNTHETIC_DATA else "disease_data.csv")
     elif mode_val == "fixed":
-        if not SYNTHETIC_DATA: raise ValueError("Still haven't fixed this for real data")
+        if not SYNTHETIC_DATA: raise ValueError("Still haven't fixed this for real data")  # noqa: E701
         return DATA_SUB / "disease_data_theta05.csv"
     
 
@@ -71,7 +71,7 @@ def change_data_dir(suffix):
         DATA_SUB = DATA_SUB / 'real'
     
 # ---- Hyperparameters ----
-EPOCHS_NUM     = 400
+EPOCHS_NUM     = 6
 BATCH_SIZE     = 32
 LR             = 0.001
 EPOCH_JUMP     = 5
