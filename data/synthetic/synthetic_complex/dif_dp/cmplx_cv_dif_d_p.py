@@ -107,6 +107,7 @@ import sys
 # samples files
 script_dir = Path(__file__).resolve().parent
 project_root = Path(__file__).resolve().parent.parent.parent
+data_dir = script_dir.parent
 sys.path.append(str(project_root))
 # samples files
 # healthy_path = Path('../../data/real/GeneMatrix_H3K4me3_healthy.csv')
@@ -124,13 +125,13 @@ def clean_rows(df: pd.DataFrame) -> pd.DataFrame:
     patient_ids = df.index.to_series().apply(lambda x: x.split('_')[0])
     return df.loc[patient_ids.groupby(patient_ids).apply(lambda g: g.index[0])]
 
-healthy_path = (script_dir / '../../real/GeneMatrix_H3K4me3_healthy.csv').resolve()
-diseaseA_path = (script_dir / '../../real/GeneMatrix_H3K4me3_crc.csv').resolve()
-diseaseB_path = (script_dir / '../../real/GeneMatrix_H3K4me3_sclc.csv').resolve()
+healthy_path = (data_dir / '../../real/GeneMatrix_H3K4me3_healthy.csv').resolve()
+diseaseA_path = (data_dir / '../../real/GeneMatrix_H3K4me3_crc.csv').resolve()
+diseaseB_path = (data_dir / '../../real/GeneMatrix_H3K4me3_sclc.csv').resolve()
 
 # thetas files
-theta_A_path = (script_dir / '../../real/theta_CRC_passedQC.csv').resolve()
-theta_B_path = (script_dir / '../../real/SCLC_theta.csv').resolve()
+theta_A_path = (data_dir / '../../real/theta_CRC_passedQC.csv').resolve()
+theta_B_path = (data_dir / '../../real/SCLC_theta.csv').resolve()
 
 print(f'{healthy_path}')
 ### Load read data
@@ -421,7 +422,6 @@ df_mixed_B = pd.DataFrame(final_mixed_B, index=df_real_healthy.index,
 rows_over_num_b_mix_noise= df_mixed_B.index[(df_mixed_B > num).any(axis=1)]
 print(f"Genes over {num} for mix disease B after all noise")
 print(rows_over_num_b_mix_noise.to_list())
-raise
 # df_mixed_B.to_csv('mixed_data_B.csv')
 # pd.Series(thetas_B, name='Theta').to_csv('mixed_B_thetas.csv', index=False)
 
@@ -461,6 +461,7 @@ combined_mixed_uniform_df.to_csv(script_dir/"disease_data_uniform_theta.csv")
 
 print(f"Saved Uniform Theta Mix. Shape: {combined_mixed_uniform_df.shape}") 
 # Expected: (20000, 300)
+raise
 
 # =========================================================
 # 2. GENERATE, COMBINE, AND SAVE: Fixed Theta (0.5) Mixed Data
