@@ -16,7 +16,7 @@ SYNTHETIC_TYPE = 'complex'
 # Choose Variant. 
 # Synthetic Options: 'dif_dp', 'dif_hp', 'theta_0.1', 'theta_0.01', 'theta_0.001', 'theta_0.005', 'theta_lim_0.7', 'theta_no_lim'
 # Real Options: 'basic', 'gene_reduc'
-VARIANT = 'theta_0.01' 
+VARIANT = 'dif_dp' 
 
 # Choose Theta Mode: 'true', 'fixed', 'random'
 THETA_EXP_MODE = 'true' 
@@ -113,7 +113,7 @@ HEALTHY_OUT_DIR = BASE_EXP_DIR / 'healthy'
 DISEASE_OUT_DIR = BASE_EXP_DIR / 'disease_mix'
 
 
-def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODELS_SUBFOLDER, is_mixed=False):
+def get_path(phase, scale_tag=None, model_type=None, enc=None, folder_type=MODELS_SUBFOLDER, is_mixed=True):
     if phase == "healthy":
         root = HEALTHY_OUT_DIR
     elif phase == "disease":

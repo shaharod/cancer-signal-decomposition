@@ -168,8 +168,10 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     bad_samples = ["SCLC0232-519_NA_H3K4me3-725_01072023-95"]
     keep_mask = ~test_df_full.index.isin(bad_samples)
     # 2. Filter the Pandas DataFrame
+    print("Before taking off mask", test_df_full.shape)
     test_df_full = test_df_full[keep_mask]
     true_disease = true_disease.drop(index=bad_samples, errors='ignore')
+    print("After masking: ", true_disease.shape, test_df_full.shape)
 
     test_t = test_t[torch.tensor(keep_mask)]
     gene_size = test_t.shape[1] - 1
@@ -191,7 +193,30 @@ def run_comprehensive_reconstruction_analysis(labels_dict, scale_bool, save_path
     true_disease = true_disease.drop(columns=metadata_cols, errors="ignore")
 
 
-
+    # SAVE RESULTS FOR JUPYTER PLOTTING
+    # ==========================================
+    notebook_savepath = cfg.get_path("disease", folder_type=cfg.MODELS_SUBFOLDER, is_mixed=is_mixed)
+    notebook_savepath = notebook_savepath / tag
+    
+    print(f"💾 Saving inference results to {notebook_savepath}...")
+    
+    
+    # Bundle everything the notebook will need to make plots
+    results_payload = {
+        "inference_cache": inference_cache,
+        "true_disease_tensor": torch.Tensor(true_disease.values).float(),
+        "test_genes_tensor": test_no_theta_t,
+        # Save the metadata (theta, disease type) so you can color-code your plots!
+        "metadata": test_df_full[metadata_cols].copy() if all(c in test_df_full.columns for c in metadata_cols) else None
+    }
+    
+    # Construct a descriptive filename so you know exactly what run this is
+    filename = f"eval_results_{tag}.pt"
+    full_save_path = notebook_savepath / filename
+    
+    torch.save(results_payload, full_save_path)
+    print(f"✅ Successfully saved evaluation bundle to: {full_save_path}")
+    return
     # ==========================================
     # 3. GENERATE VISUALIZATIONS 
     # ==========================================

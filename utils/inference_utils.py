@@ -31,6 +31,7 @@ def generate_inference_cache(labels_dict, test_w_theta_t, gene_size, tag):
                         'disease': recon_d,
                         'healthy': recon_h
                     }
+                    
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
